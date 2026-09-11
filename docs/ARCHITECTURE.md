@@ -124,11 +124,12 @@ tiếp trong tiến trình chính của mình.
 
 ---
 
-## 6. Trạng thái hiện tại (Tuần 1/8)
+## 6. Trạng thái hiện tại (Tuần 2/8)
 
 | Module | Trạng thái |
 |---|---|
-| O1 — Data Profiler | ✅ Cài đặt đầy đủ, có test, đã xác minh trên 3 bộ dữ liệu mẫu |
+| O1 — Data Profiler (Stage 1, rule-based) | ✅ Cài đặt đầy đủ, có test, đã xác minh trên 5 bộ dữ liệu mẫu (gồm 2 bộ edge-case) |
+| O1 — Data Profiler (Stage 2, LLM enrichment) | ✅ Cài đặt đầy đủ (tùy chọn), có test với client giả lập, fail-safe khi LLM lỗi |
 | O2 — Question Interpreter | ⏳ Stub (interface đã định nghĩa) — Tuần 3 |
 | O3a — Code Generator | ⏳ Stub — Tuần 4 |
 | O3b — Sandbox Executor | ⏳ Stub — Tuần 4 |

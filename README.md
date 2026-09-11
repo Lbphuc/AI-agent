@@ -8,17 +8,36 @@ Kiến trúc pipeline lấy cảm hứng từ LIDA (Dibia, 2023) — xem
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) để biết cách 5 module được
 mở rộng từ ý tưởng SUMMARIZER / GOAL EXPLORER / VISGENERATOR của LIDA.
 
-## Trạng thái (Tuần 1/8)
+## Trạng thái (Tuần 2/8)
 
 - [x] Nghiên cứu tài liệu, xác định yêu cầu (`docs/SRS.md`)
 - [x] Thiết kế kiến trúc tổng thể (`docs/ARCHITECTURE.md`)
 - [x] Khởi tạo repo + CI cơ bản
-- [x] Bộ dữ liệu mẫu (`data/samples/`)
-- [x] Module O1 — Data Profiler (cài đặt đầy đủ, có test)
+- [x] Bộ dữ liệu mẫu — **5 bộ** (`data/samples/`), gồm 2 bộ edge-case
+- [x] Module O1 — Data Profiler Stage 1 (rule-based, đã sửa 2 bug phát
+      hiện khi test với dữ liệu edge-case — xem CHANGELOG bên dưới)
+- [x] Module O1 — Data Profiler Stage 2 (làm giàu ngữ nghĩa bằng LLM,
+      tùy chọn, có test với client giả lập)
 - [ ] Module O2 — Question Interpreter (Tuần 3)
 - [ ] Module O3 — Code Generator + Sandbox Executor (Tuần 4)
 - [ ] Module O4 — Chart Generator (Tuần 5)
 - [ ] Module O5 — Insight Generator (Tuần 6)
+
+### CHANGELOG Tuần 2
+
+- **Fix:** cột số nhỏ (ví dụ điểm đánh giá 1-5) từng bị `pd.to_datetime()`
+  nhận nhầm thành cột thời gian → giới hạn chỉ thử ép kiểu ngày trên
+  cột dạng chuỗi.
+- **Fix:** cột văn bản tự do / định danh (mỗi dòng gần như một giá trị
+  khác nhau) từng bị nhận nhầm là cột nhóm khi dùng ngưỡng tuyệt đối
+  `nunique() <= 20` trên tập dữ liệu nhỏ → đổi sang ngưỡng theo TỶ LỆ
+  (`nunique / row_count <= 0.5`).
+- **Mới:** `data_profiler.enrich()` — Stage 2 (tùy chọn, gọi Claude
+  API một lần duy nhất để sinh mô tả dataset + mô tả/kiểu ngữ nghĩa
+  từng cột). Thiết kế fail-safe: lỗi LLM không làm sập pipeline.
+- **Mới:** 2 bộ dữ liệu edge-case (`danh_gia_khach_hang.csv` — có cột
+  văn bản tự do; `ton_kho.csv` — có giá trị thiếu) để tổng số bộ dữ
+  liệu mẫu đạt 5, đúng mục tiêu Tuần 2 trong kế hoạch 8 tuần.
 
 ## Cấu trúc thư mục
 

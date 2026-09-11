@@ -52,6 +52,32 @@ def test_profile_handles_no_time_column():
     assert result.time_column is None
 
 
+def test_profile_danh_gia_khach_hang():
+    """Edge case: cột số nhỏ (điểm 1-5) không được nhầm là cột thời gian;
+    cột văn bản tự do (mỗi dòng gần như khác nhau) không được coi là
+    cột nhóm. Đây là 2 bug thực tế phát hiện khi kiểm thử Tuần 2."""
+    df = pd.read_csv(SAMPLES_DIR / "danh_gia_khach_hang.csv")
+    result = data_profiler.profile(df)
+
+    assert result.time_column is None
+    assert result.group_columns == ["San_pham"]
+    assert "Khach_hang" not in result.group_columns  # dinh danh, khong phai nhom
+    assert "Nhan_xet" not in result.group_columns  # van ban tu do
+    assert result.numeric_columns == ["Diem_danh_gia"]
+
+
+def test_profile_ton_kho_missing_values():
+    """Edge case: dữ liệu có giá trị thiếu (NaN) — n_missing phải đếm
+    đúng, không được làm profile() lỗi."""
+    df = pd.read_csv(SAMPLES_DIR / "ton_kho.csv")
+    result = data_profiler.profile(df)
+
+    assert result.time_column == "Thang"
+    assert result.group_columns == ["Kho"]
+    ton_col = next(c for c in result.columns if c.name == "So_luong_ton")
+    assert ton_col.n_missing == 3
+
+
 def test_downstream_modules_raise_not_implemented():
     """O2-O5 là stub ở Tuần 1 - xác nhận chúng báo lỗi rõ ràng thay vì
     âm thầm trả kết quả sai."""

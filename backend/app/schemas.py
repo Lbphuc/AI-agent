@@ -26,13 +26,20 @@ class ColumnProfile(BaseModel):
     samples: list[str] = Field(default_factory=list)
     min: Optional[str] = None
     max: Optional[str] = None
+    # --- Stage 2 (tùy chọn, làm giàu bằng LLM) ---
+    description: Optional[str] = None
+    semantic_type: Optional[str] = None
 
 
 class DataProfile(BaseModel):
     """Đầu ra của module Data Profiler (O1).
 
-    Tương ứng Stage 1 (base summary) của SUMMARIZER trong LIDA — hoàn
-    toàn dựa trên luật (pandas), không gọi LLM.
+    Stage 1 (các trường phía trên `description`) hoàn toàn dựa trên
+    luật (pandas), không gọi LLM. Stage 2 (`dataset_description`, và
+    `description`/`semantic_type` trong từng ColumnProfile) là TÙY
+    CHỌN, được điền bởi hàm `enrich()` nếu người dùng/hệ thống chọn
+    gọi LLM để làm giàu — tương ứng 2 giai đoạn của SUMMARIZER trong
+    LIDA (Dibia, 2023).
     """
 
     row_count: int
@@ -40,6 +47,8 @@ class DataProfile(BaseModel):
     time_column: Optional[str] = None
     group_columns: list[str] = Field(default_factory=list)
     numeric_columns: list[str] = Field(default_factory=list)
+    # --- Stage 2 (tùy chọn, làm giàu bằng LLM) ---
+    dataset_description: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
