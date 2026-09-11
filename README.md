@@ -35,9 +35,22 @@ mở rộng từ ý tưởng SUMMARIZER / GOAL EXPLORER / VISGENERATOR của LID
 - **Mới:** `data_profiler.enrich()` — Stage 2 (tùy chọn, gọi Claude
   API một lần duy nhất để sinh mô tả dataset + mô tả/kiểu ngữ nghĩa
   từng cột). Thiết kế fail-safe: lỗi LLM không làm sập pipeline.
-- **Mới:** 2 bộ dữ liệu edge-case (`danh_gia_khach_hang.csv` — có cột
-  văn bản tự do; `ton_kho.csv` — có giá trị thiếu) để tổng số bộ dữ
-  liệu mẫu đạt 5, đúng mục tiêu Tuần 2 trong kế hoạch 8 tuần.
+### Review & fix sau khi tự kiểm tra kỹ code Tuần 1-2
+
+- **Fix (thiết kế):** `DataProfile` thiếu khoảng thời gian thực tế của
+  cột thời gian → thêm `time_min`/`time_max`, tính bằng hàm
+  `_time_range()`. Cần thiết để O2 (Tuần 3) giải nghĩa các biểu thức
+  thời gian tương đối (vd: "12 tháng gần nhất") mà không phải đọc lại
+  DataFrame thô.
+- **Fix (logging):** `enrich()` trước đây nuốt lỗi hoàn toàn im lặng
+  dù docstring nói "log cảnh báo" — nay đã thêm `logging.warning(...,
+  exc_info=True)` thật, đã verify log xuất hiện đúng khi LLM lỗi.
+- **Fix (API robustness):** endpoint `/profile` giờ bắt lỗi CSV không
+  hợp lệ/rỗng, trả `HTTPException(400, ...)` gọn thay vì để lộ
+  traceback thô ra client.
+- **Fix (tài liệu):** sửa tham chiếu file không tồn tại trong
+  `main.py`, cập nhật docstring lỗi thời trong test (nói "3 bộ dữ
+  liệu" trong khi đã có 5 bộ).
 
 ## Cấu trúc thư mục
 

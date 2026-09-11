@@ -1,4 +1,5 @@
-"""Kiểm thử module O1 (Data Profiler) trên 3 bộ dữ liệu mẫu thật.
+"""Kiểm thử module O1 (Data Profiler) trên 5 bộ dữ liệu mẫu thật
+(gồm 2 bộ edge-case: văn bản tự do, giá trị thiếu).
 
 Chạy: pytest -v (từ thư mục gốc repo, cần pandas + pydantic đã cài).
 """
@@ -20,6 +21,8 @@ def test_profile_doanh_thu():
 
     assert result.row_count == len(df) == 48
     assert result.time_column == "Thang"
+    assert result.time_min == "2025-09-01"
+    assert result.time_max == "2026-08-01"
     assert result.group_columns == ["Chi_nhanh"]
     assert result.numeric_columns == ["Doanh_thu_trieu_vnd"]
     assert len(result.columns) == 3
@@ -60,6 +63,8 @@ def test_profile_danh_gia_khach_hang():
     result = data_profiler.profile(df)
 
     assert result.time_column is None
+    assert result.time_min is None
+    assert result.time_max is None
     assert result.group_columns == ["San_pham"]
     assert "Khach_hang" not in result.group_columns  # dinh danh, khong phai nhom
     assert "Nhan_xet" not in result.group_columns  # van ban tu do
@@ -73,6 +78,8 @@ def test_profile_ton_kho_missing_values():
     result = data_profiler.profile(df)
 
     assert result.time_column == "Thang"
+    assert result.time_min == "2026-01-01"
+    assert result.time_max == "2026-04-01"
     assert result.group_columns == ["Kho"]
     ton_col = next(c for c in result.columns if c.name == "So_luong_ton")
     assert ton_col.n_missing == 3

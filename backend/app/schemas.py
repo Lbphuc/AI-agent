@@ -34,17 +34,24 @@ class ColumnProfile(BaseModel):
 class DataProfile(BaseModel):
     """Đầu ra của module Data Profiler (O1).
 
-    Stage 1 (các trường phía trên `description`) hoàn toàn dựa trên
-    luật (pandas), không gọi LLM. Stage 2 (`dataset_description`, và
-    `description`/`semantic_type` trong từng ColumnProfile) là TÙY
-    CHỌN, được điền bởi hàm `enrich()` nếu người dùng/hệ thống chọn
-    gọi LLM để làm giàu — tương ứng 2 giai đoạn của SUMMARIZER trong
-    LIDA (Dibia, 2023).
+    Stage 1 (các trường phía trên `dataset_description`) hoàn toàn dựa
+    trên luật (pandas), không gọi LLM. Trong đó `time_min`/`time_max`
+    là khoảng thời gian thực tế của `time_column` (nếu có) — cần thiết
+    để module O2 (Question Interpreter) giải nghĩa các biểu thức thời
+    gian tương đối (vd: "12 tháng gần nhất") mà KHÔNG phải đọc lại
+    DataFrame thô, giữ đúng ranh giới module (NFR-05).
+
+    Stage 2 (`dataset_description`, và `description`/`semantic_type`
+    trong từng ColumnProfile) là TÙY CHỌN, được điền bởi hàm
+    `enrich()` — tương ứng 2 giai đoạn của SUMMARIZER trong LIDA
+    (Dibia, 2023).
     """
 
     row_count: int
     columns: list[ColumnProfile]
     time_column: Optional[str] = None
+    time_min: Optional[str] = None
+    time_max: Optional[str] = None
     group_columns: list[str] = Field(default_factory=list)
     numeric_columns: list[str] = Field(default_factory=list)
     # --- Stage 2 (tùy chọn, làm giàu bằng LLM) ---

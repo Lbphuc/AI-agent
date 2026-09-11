@@ -1,16 +1,17 @@
 """AI Agent - Phân tích & Trực quan hóa Dữ liệu Kinh doanh.
 
-Điểm khởi đầu ứng dụng FastAPI. Ở Tuần 1, chỉ có endpoint /health và
+Điểm khởi đầu ứng dụng FastAPI. Ở Tuần 1-2, chỉ có endpoint /health và
 /profile (chạy module O1). Endpoint /analyze (ghép đủ 5 module) sẽ
-hoàn thiện dần từ Tuần 3 đến Tuần 6, theo đúng kế hoạch trong
-docs/../PROJECT_PROPOSAL (mục 7).
+hoàn thiện dần từ Tuần 3 đến Tuần 6 — xem kế hoạch chi tiết tại
+docs/SRS.md (mục 3, danh sách FR) và docs/ARCHITECTURE.md (mục 6,
+bảng trạng thái từng module).
 """
 from __future__ import annotations
 
 import io
 
 import pandas as pd
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 from .modules import data_profiler
 from .schemas import DataProfile
@@ -33,9 +34,30 @@ async def profile_csv(file: UploadFile = File(...)) -> DataProfile:
 
     Dùng để kiểm thử/demo module O1 độc lập trước khi pipeline đầy đủ
     (O2-O5) sẵn sàng.
+
+    Raises:
+        HTTPException(400): file rỗng, không phải CSV hợp lệ, hoặc
+            pandas không đọc được — trả thông báo lỗi gọn cho client
+            thay vì để lộ traceback thô (NFR-04).
     """
     content = await file.read()
-    df = pd.read_csv(io.BytesIO(content))
+    if not content:
+        raise HTTPException(status_code=400, detail="File rong hoac khong doc duoc.")
+
+    try:
+        df = pd.read_csv(io.BytesIO(content))
+    except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Khong the doc file CSV: {exc.__class__.__name__}. "
+            "Vui long kiem tra dinh dang file (dau phay, ma hoa UTF-8).",
+        ) from exc
+
+    if df.empty:
+        raise HTTPException(
+            status_code=400, detail="File CSV khong co du lieu (chi co header)."
+        )
+
     return data_profiler.profile(df)
 
 

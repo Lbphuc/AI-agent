@@ -21,12 +21,15 @@ dtype "str" hoặc "string" thay vì "object" tùy phiên bản/cấu hình.
 from __future__ import annotations
 
 import json
+import logging
 import warnings
 from typing import Protocol
 
 import pandas as pd
 
 from ..schemas import ColumnProfile, DataProfile
+
+logger = logging.getLogger(__name__)
 
 
 def _guess_time_column(df: pd.DataFrame) -> str | None:
@@ -77,6 +80,27 @@ def _guess_group_columns(df: pd.DataFrame, time_col: str | None) -> list[str]:
     return groups
 
 
+def _time_range(
+    df: pd.DataFrame, time_col: str | None
+) -> tuple[str | None, str | None]:
+    """Tính khoảng thời gian [min, max] thực tế của cột thời gian.
+
+    Cần thiết để O2 (Question Interpreter, Tuần 3) giải nghĩa các
+    biểu thức thời gian tương đối trong câu hỏi (ví dụ "12 tháng gần
+    nhất") mà KHÔNG phải tự đọc lại DataFrame thô — nếu không có
+    trường này, O2 buộc phải vi phạm ranh giới module (chỉ nên phụ
+    thuộc DataProfile, không phụ thuộc DataFrame).
+    """
+    if time_col is None:
+        return None, None
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        parsed = pd.to_datetime(df[time_col], errors="coerce").dropna()
+    if parsed.empty:
+        return None, None
+    return str(parsed.min().date()), str(parsed.max().date())
+
+
 def profile(df: pd.DataFrame, n_samples: int = 3) -> DataProfile:
     """Sinh bản tóm tắt (profile) cho một DataFrame.
 
@@ -89,6 +113,7 @@ def profile(df: pd.DataFrame, n_samples: int = 3) -> DataProfile:
         module Question Interpreter (O2) ở bước tiếp theo.
     """
     time_col = _guess_time_column(df)
+    time_min, time_max = _time_range(df, time_col)
     group_cols = _guess_group_columns(df, time_col)
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
 
@@ -111,6 +136,8 @@ def profile(df: pd.DataFrame, n_samples: int = 3) -> DataProfile:
         row_count=len(df),
         columns=columns,
         time_column=time_col,
+        time_min=time_min,
+        time_max=time_max,
         group_columns=group_cols,
         numeric_columns=numeric_cols,
     )
@@ -246,8 +273,17 @@ def enrich(profile: DataProfile, llm: LLMClient | None = None) -> DataProfile:
     try:
         raw = llm.complete_json(_build_enrichment_prompt(profile))
         return _merge_enrichment(profile, raw)
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-        # Làm giàu là tùy chọn -> lỗi ở đây không được phép chặn pipeline.
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        # Làm giàu là tùy chọn -> lỗi ở đây không được phép chặn pipeline,
+        # nhưng PHẢI log lại (kèm traceback) để còn debug được khi tích
+        # hợp Claude API thật — trước bản sửa này, lỗi bị nuốt hoàn toàn
+        # im lặng, mâu thuẫn với FR-10 (ghi log lỗi từng module).
+        logger.warning(
+            "Stage 2 (enrich) that bai, tra ve profile goc khong lam giau. "
+            "Loi: %s",
+            exc,
+            exc_info=True,
+        )
         return profile
 
 
