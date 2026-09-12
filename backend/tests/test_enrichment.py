@@ -51,6 +51,15 @@ class BrokenLLMClient:
         raise ValueError("gia lap loi parse JSON tu LLM")
 
 
+class NonDictLLMClient:
+    """Mô phỏng LLM trả JSON hợp lệ nhưng SAI CẤU TRÚC (list thay vì
+    object) — bug thực tế phát hiện khi review Tuần 1-2: nếu không
+    chặn trước, `raw.get(...)` sẽ raise AttributeError không bị bắt."""
+
+    def complete_json(self, prompt: str) -> dict:
+        return ["day la mot list, khong phai dict"]  # type: ignore[return-value]
+
+
 @pytest.fixture()
 def base_profile():
     df = pd.read_csv(SAMPLES_DIR / "doanh_thu.csv")
@@ -74,7 +83,19 @@ def test_enrich_with_valid_llm_merges_correctly(base_profile):
     assert base_profile.dataset_description is None
 
 
-def test_enrich_with_broken_llm_falls_back_gracefully(base_profile):
-    """Lỗi LLM ở bước tùy chọn không được phép làm sập pipeline."""
-    result = data_profiler.enrich(base_profile, llm=BrokenLLMClient())
+def test_enrich_with_broken_llm_falls_back_gracefully(base_profile, caplog):
+    """Lỗi LLM ở bước tùy chọn không được phép làm sập pipeline, VÀ
+    phải được ghi log (trước bản sửa Tuần 2, lỗi bị nuốt hoàn toàn im
+    lặng — mâu thuẫn với FR-10)."""
+    with caplog.at_level("WARNING"):
+        result = data_profiler.enrich(base_profile, llm=BrokenLLMClient())
+
+    assert result.dataset_description is None
+    assert any("that bai" in rec.message for rec in caplog.records)
+
+
+def test_enrich_with_non_dict_response_does_not_crash(base_profile):
+    """Trước bản sửa: raw.get(...) trên một list sẽ raise AttributeError
+    không nằm trong except -> crash. Test này khóa lại hành vi đúng."""
+    result = data_profiler.enrich(base_profile, llm=NonDictLLMClient())
     assert result.dataset_description is None

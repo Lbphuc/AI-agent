@@ -1,6 +1,10 @@
 fastapi>=0.110
 uvicorn[standard]>=0.29
-pandas>=2.2
+# Da xac minh tuong thich pandas 2.x va 3.x (bao gom thay doi dtype cot
+# chuoi tu "object" sang "str" trong pandas 3.0 - xem CHANGELOG Tuan 2
+# trong README.md). Chan tran <5 de tranh thay doi breaking chua biet
+# truoc trong tuong lai.
+pandas>=2.2,<5.0
 pydantic>=2.6
 anthropic>=0.34
 python-multipart>=0.0.9

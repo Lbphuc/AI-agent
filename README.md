@@ -35,6 +35,7 @@ mở rộng từ ý tưởng SUMMARIZER / GOAL EXPLORER / VISGENERATOR của LID
 - **Mới:** `data_profiler.enrich()` — Stage 2 (tùy chọn, gọi Claude
   API một lần duy nhất để sinh mô tả dataset + mô tả/kiểu ngữ nghĩa
   từng cột). Thiết kế fail-safe: lỗi LLM không làm sập pipeline.
+
 ### Review & fix sau khi tự kiểm tra kỹ code Tuần 1-2
 
 - **Fix (thiết kế):** `DataProfile` thiếu khoảng thời gian thực tế của
@@ -45,12 +46,31 @@ mở rộng từ ý tưởng SUMMARIZER / GOAL EXPLORER / VISGENERATOR của LID
 - **Fix (logging):** `enrich()` trước đây nuốt lỗi hoàn toàn im lặng
   dù docstring nói "log cảnh báo" — nay đã thêm `logging.warning(...,
   exc_info=True)` thật, đã verify log xuất hiện đúng khi LLM lỗi.
+- **Fix (robustness):** nếu LLM trả JSON hợp lệ nhưng sai cấu trúc
+  (ví dụ một list thay vì object), `raw.get(...)` sẽ raise
+  `AttributeError` không nằm trong except cũ → vẫn crash dù đã có
+  try/except. Đã thêm kiểm tra `isinstance(raw, dict)` + bắt thêm
+  `AttributeError`, có test khóa lại hành vi đúng.
 - **Fix (API robustness):** endpoint `/profile` giờ bắt lỗi CSV không
   hợp lệ/rỗng, trả `HTTPException(400, ...)` gọn thay vì để lộ
   traceback thô ra client.
+- **Fix (hạ tầng):** thêm `CORSMiddleware` vào FastAPI app từ sớm, để
+  không bị chặn khi tích hợp frontend React ở Tuần 7.
+- **Fix (phụ thuộc):** chặn trên `pandas<5.0` trong `requirements.txt`
+  — chính thay đổi dtype trong pandas 3.0 là nguyên nhân 2 bug ở trên,
+  nên cần kiểm soát version chặt hơn `>=` đơn thuần.
 - **Fix (tài liệu):** sửa tham chiếu file không tồn tại trong
   `main.py`, cập nhật docstring lỗi thời trong test (nói "3 bộ dữ
   liệu" trong khi đã có 5 bộ).
+
+### Cố tình CHƯA sửa (ghi nhận, để dành cho tuần sau)
+
+- `AnalysisTask.type`/`find`, `ChartSpec.chart_type` vẫn là `str` tự
+  do thay vì `Literal[...]` — sẽ chốt giá trị hợp lệ khi cài đặt thật
+  O2/O4 (Tuần 3, 5) để tránh khóa cứng quá sớm.
+- Ngưỡng `nunique <= 50` trong `_guess_group_columns` là số cứng, chưa
+  test ở quy mô dữ liệu thật lớn (>50 danh mục) — theo dõi khi có bộ
+  dữ liệu lớn hơn.
 
 ## Cấu trúc thư mục
 
@@ -62,23 +82,26 @@ ai-agent-bi/
 ├── docs/
 │   ├── SRS.md                 # Đặc tả yêu cầu rút gọn
 │   └── ARCHITECTURE.md        # Kiến trúc hệ thống chi tiết
-├── data/samples/               # Bộ dữ liệu mẫu để phát triển & test
+├── data/samples/               # Bộ dữ liệu mẫu để phát triển & test (5 bộ)
 │   ├── doanh_thu.csv
 │   ├── ban_hang_san_pham.csv
-│   └── chi_phi_van_hanh.csv
+│   ├── chi_phi_van_hanh.csv
+│   ├── danh_gia_khach_hang.csv  # edge-case: cột văn bản tự do
+│   └── ton_kho.csv              # edge-case: giá trị thiếu
 ├── backend/
 │   ├── app/
-│   │   ├── main.py             # FastAPI app
+│   │   ├── main.py             # FastAPI app (CORS, xử lý lỗi upload)
 │   │   ├── schemas.py          # Hợp đồng dữ liệu (I/O) giữa các module
 │   │   └── modules/
-│   │       ├── data_profiler.py         # O1 - đã cài đặt
+│   │       ├── data_profiler.py         # O1 - đã cài đặt (Stage 1+2)
 │   │       ├── question_interpreter.py  # O2 - stub
 │   │       ├── code_generator.py        # O3a - stub
 │   │       ├── sandbox_executor.py      # O3b - stub
 │   │       ├── chart_generator.py       # O4 - stub
 │   │       └── insight_generator.py     # O5 - stub
 │   └── tests/
-│       └── test_data_profiler.py
+│       ├── test_data_profiler.py   # Stage 1 (7 kịch bản)
+│       └── test_enrichment.py      # Stage 2 (5 kịch bản)
 └── .github/workflows/ci.yml
 ```
 

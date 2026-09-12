@@ -272,8 +272,16 @@ def enrich(profile: DataProfile, llm: LLMClient | None = None) -> DataProfile:
 
     try:
         raw = llm.complete_json(_build_enrichment_prompt(profile))
+        if not isinstance(raw, dict):
+            # LLM co the tra ve JSON hop le nhung khong phai object
+            # (vd mot list) - raw.get(...) se raise AttributeError neu
+            # khong chan truoc; quy no ve ValueError de nhat quan voi
+            # cac loi "cau truc JSON sai" khac ben duoi.
+            raise ValueError(
+                f"LLM tra ve kieu {type(raw).__name__}, ky vong dict/JSON object"
+            )
         return _merge_enrichment(profile, raw)
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError) as exc:
         # Làm giàu là tùy chọn -> lỗi ở đây không được phép chặn pipeline,
         # nhưng PHẢI log lại (kèm traceback) để còn debug được khi tích
         # hợp Claude API thật — trước bản sửa này, lỗi bị nuốt hoàn toàn

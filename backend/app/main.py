@@ -12,6 +12,7 @@ import io
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 
 from .modules import data_profiler
 from .schemas import DataProfile
@@ -20,6 +21,16 @@ app = FastAPI(
     title="AI Agent Phan Tich Du Lieu Kinh Doanh",
     description="Dua tren kien truc pipeline lay cam hung tu LIDA (Dibia, 2023).",
     version="0.1.0",
+)
+
+# Them som tu Tuan 2 de tranh chan tich hop frontend (React) o Tuan 7.
+# TODO (truoc khi trien khai that): gioi han allow_origins ve dung domain
+# frontend thuc te thay vi "*" - hien tai de rong cho tien phat trien/demo.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -46,7 +57,13 @@ async def profile_csv(file: UploadFile = File(...)) -> DataProfile:
 
     try:
         df = pd.read_csv(io.BytesIO(content))
-    except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as exc:
+    except Exception as exc:
+        # Day la tang bien (API boundary) xu ly input tu nguoi dung ben
+        # ngoai - CO CHU DICH bat rong (khac voi enrich() o tang logic
+        # noi bo, noi bat rong co the che giau bug that). pandas co the
+        # nem nhieu loai loi khac nhau tuy noi dung file loi (ParserError,
+        # EmptyDataError, UnicodeDecodeError, ValueError...) - muc tieu
+        # o day la KHONG BAO GIO de traceback tho lot ra ngoai cho client.
         raise HTTPException(
             status_code=400,
             detail=f"Khong the doc file CSV: {exc.__class__.__name__}. "
