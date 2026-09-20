@@ -8,7 +8,7 @@ triển và kiểm thử độc lập trong các tuần tiếp theo, đúng tinh
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -61,20 +61,42 @@ class DataProfile(BaseModel):
 # ---------------------------------------------------------------------------
 # O2 - Question Interpreter
 # ---------------------------------------------------------------------------
+# Tuần 1-2: type/find từng là str tự do (cố tình chưa chốt Literal, xem
+# README "Cố tình CHƯA sửa"). Tuần 3 cài đặt O2 thật -> chốt lại đúng 3
+# loại phân tích nêu trong kế hoạch 8 tuần (SRS mục 3, ghi chú Tuần 3):
+# xu hướng (trend), so sánh (comparison), tăng/giảm (growth_rate).
+TaskType = Literal["trend", "comparison", "growth_rate"]
+FindMode = Literal["min", "max"]
+# 4 pham vi thoi gian "chuan hoa" ma LLM duoc phep chon - CHỈ chọn nhãn,
+# KHÔNG tự tính ngày tháng cụ thể. Việc tính time_start/time_end thật
+# (dua tren DataProfile.time_max) la logic Python tat dinh trong
+# question_interpreter._resolve_time_range(), khong giao cho LLM - dung
+# nguyen tac da ap dung cho O3 (tach LLM suy luan khoi tinh toan chinh
+# xac).
+TimeScope = Literal["all", "last_3_months", "last_6_months", "last_12_months", "custom"]
+
+
 class AnalysisTask(BaseModel):
     """Một tác vụ phân tích con được suy ra từ câu hỏi người dùng."""
 
-    type: str  # "trend" | "comparison" | "growth_rate" | "extremum"
+    type: TaskType
     metric: str  # tên cột số cần tính, ví dụ "Doanh_thu_trieu_vnd"
     group_by: Optional[str] = None  # tên cột nhóm, ví dụ "Chi_nhanh"
-    find: Optional[str] = None  # "min" | "max" (dùng cho growth_rate/extremum)
+    find: Optional[FindMode] = None  # dùng cho growth_rate (chi nhánh min/max)
 
 
 class AnalysisGoal(BaseModel):
-    """Đầu ra của module Question Interpreter (O2)."""
+    """Đầu ra của module Question Interpreter (O2).
+
+    `time_scope` là nhãn LLM chọn; `time_start`/`time_end` là ngày cụ
+    thể do Python tính ra (không phải LLM) dựa trên `time_scope` và
+    `DataProfile.time_max` — xem question_interpreter._resolve_time_range.
+    """
 
     question: str
-    time_range: Optional[str] = None  # ví dụ "12 tháng gần nhất"
+    time_scope: TimeScope = "last_12_months"  # mac dinh theo FR-11
+    time_start: Optional[str] = None
+    time_end: Optional[str] = None
     tasks: list[AnalysisTask]
 
 

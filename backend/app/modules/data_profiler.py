@@ -23,10 +23,10 @@ from __future__ import annotations
 import json
 import logging
 import warnings
-from typing import Protocol
 
 import pandas as pd
 
+from ..llm_client import LLMClient
 from ..schemas import ColumnProfile, DataProfile
 
 logger = logging.getLogger(__name__)
@@ -146,52 +146,8 @@ def profile(df: pd.DataFrame, n_samples: int = 3) -> DataProfile:
 # =============================================================================
 # Stage 2 — Làm giàu ngữ nghĩa bằng LLM (TÙY CHỌN, FR-02 phần mở rộng)
 # =============================================================================
-
-
-class LLMClient(Protocol):
-    """Interface tối giản cho một LLM client.
-
-    Định nghĩa dưới dạng Protocol (không phải lớp cụ thể) để:
-      1. `enrich()` không phụ thuộc trực tiếp vào SDK của Anthropic
-         -> dễ kiểm thử bằng client giả lập (xem backend/tests).
-      2. Có thể thay bằng client khác (Haiku rẻ hơn, hoặc mô hình khác)
-         mà không phải sửa logic enrich().
-    """
-
-    def complete_json(self, prompt: str) -> dict:
-        """Gửi prompt, trả về dict đã parse sẵn từ JSON do LLM sinh ra.
-
-        Cài đặt cụ thể (ClaudeClient bên dưới) chịu trách nhiệm parse
-        JSON; enrich() chỉ làm việc với dict thuần Python.
-        """
-        ...
-
-
-class ClaudeClient:
-    """Cài đặt LLMClient dùng Claude API (Anthropic SDK).
-
-    Model mặc định: claude-sonnet-5 — cân bằng chất lượng suy luận và
-    chi phí, phù hợp cho tác vụ mô tả ngữ nghĩa dữ liệu. Với tác vụ đơn
-    giản hơn (ví dụ chỉ phân loại kiểu cột, không cần mô tả dài), có
-    thể cân nhắc claude-haiku-4-5-20251001 để giảm chi phí/độ trễ.
-    """
-
-    def __init__(self, model: str = "claude-sonnet-5", api_key: str | None = None):
-        import anthropic  # import cục bộ - tránh bắt buộc cài đặt SDK
-
-        self._client = anthropic.Anthropic(api_key=api_key)
-        self._model = model
-
-    def complete_json(self, prompt: str) -> dict:
-        response = self._client.messages.create(
-            model=self._model,
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = "".join(
-            block.text for block in response.content if block.type == "text"
-        )
-        return json.loads(text)
+# LLMClient / ClaudeClient dùng chung được định nghĩa ở backend/app/llm_client.py
+# (từ Tuần 3, khi O2 cũng bắt đầu cần đến LLM — xem docstring ở đó).
 
 
 def _build_enrichment_prompt(profile: DataProfile) -> str:

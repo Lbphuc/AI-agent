@@ -86,18 +86,17 @@ def test_profile_ton_kho_missing_values():
 
 
 def test_downstream_modules_raise_not_implemented():
-    """O2-O5 là stub ở Tuần 1 - xác nhận chúng báo lỗi rõ ràng thay vì
-    âm thầm trả kết quả sai."""
+    """O3-O5 vẫn là stub (chưa tới tuần cài đặt) - xác nhận chúng báo
+    lỗi rõ ràng thay vì âm thầm trả kết quả sai. O2 (Question
+    Interpreter) đã cài đặt thật từ Tuần 3 -> xem
+    backend/tests/test_question_interpreter.py thay vì kiểm tra ở đây."""
     from backend.app.modules import (
         chart_generator,
         code_generator,
         insight_generator,
-        question_interpreter,
         sandbox_executor,
     )
 
-    with pytest.raises(NotImplementedError):
-        question_interpreter.interpret("bat ky cau hoi nao", profile=None)
     with pytest.raises(NotImplementedError):
         code_generator.generate(goal=None, profile=None)
     with pytest.raises(NotImplementedError):

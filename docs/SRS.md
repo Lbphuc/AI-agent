@@ -107,7 +107,7 @@ Interface chi tiết được định nghĩa bằng Pydantic trong `backend/app/
 | Module | Input | Output |
 |---|---|---|
 | O1 — Data Profiler | `DataFrame` | `DataProfile` (schema, time_column, group_columns, numeric_columns) |
-| O2 — Question Interpreter | `question: str`, `DataProfile` | `AnalysisGoal` (time_range, list[AnalysisTask]) |
+| O2 — Question Interpreter | `question: str`, `DataProfile` | `AnalysisGoal` (time_scope, time_start, time_end, list[AnalysisTask]) |
 | O3a — Code Generator | `AnalysisGoal`, `DataProfile` | `CodeGenResult` (code, expected_outputs) |
 | O3b — Sandbox Executor | `code: str`, `DataFrame` | `ExecutionResult` (success, results, error, attempts) |
 | O4 — Chart Generator | `list[AnalysisTask]`, `ExecutionResult` | `list[ChartSpec]` (chart_type, title, x, series) |

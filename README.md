@@ -8,7 +8,7 @@ Kiến trúc pipeline lấy cảm hứng từ LIDA (Dibia, 2023) — xem
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) để biết cách 5 module được
 mở rộng từ ý tưởng SUMMARIZER / GOAL EXPLORER / VISGENERATOR của LIDA.
 
-## Trạng thái (Tuần 2/8)
+## Trạng thái (Tuần 3/8)
 
 - [x] Nghiên cứu tài liệu, xác định yêu cầu (`docs/SRS.md`)
 - [x] Thiết kế kiến trúc tổng thể (`docs/ARCHITECTURE.md`)
@@ -18,10 +18,36 @@ mở rộng từ ý tưởng SUMMARIZER / GOAL EXPLORER / VISGENERATOR của LID
       hiện khi test với dữ liệu edge-case — xem CHANGELOG bên dưới)
 - [x] Module O1 — Data Profiler Stage 2 (làm giàu ngữ nghĩa bằng LLM,
       tùy chọn, có test với client giả lập)
-- [ ] Module O2 — Question Interpreter (Tuần 3)
+- [x] Module O2 — Question Interpreter (prompt few-shot, grounding
+      check, toán ngày tháng tất định, 10 test với client giả lập)
 - [ ] Module O3 — Code Generator + Sandbox Executor (Tuần 4)
 - [ ] Module O4 — Chart Generator (Tuần 5)
 - [ ] Module O5 — Insight Generator (Tuần 6)
+
+### CHANGELOG Tuần 3
+
+- **Refactor:** tách `LLMClient`/`ClaudeClient` ra `backend/app/llm_client.py`
+  dùng chung, vì từ tuần này có 2 module (O1 Stage 2, O2) cùng cần đến
+  — tránh trùng lặp code, tránh lệch nhau khi đổi model mặc định.
+- **Chốt schema:** `AnalysisTask.type`/`find` chuyển từ `str` tự do
+  sang `Literal[...]` (đúng như đã ghi chú "cố tình chưa sửa" ở Tuần
+  1-2 — nay cài đặt O2 thật nên chốt lại). Thay `AnalysisGoal.time_range`
+  (chuỗi tự do) bằng `time_scope` (nhãn LLM chọn: "all" |
+  "last_3_months" | "last_6_months" | "last_12_months" | "custom") +
+  `time_start`/`time_end` (ngày cụ thể do PYTHON tính, không phải LLM).
+- **Mới:** `question_interpreter.interpret()` — prompt few-shot (5 ví
+  dụ, gắn chặt vào tên cột thật của dataset để giảm hallucination),
+  xử lý đúng 3 loại phân tích trong kế hoạch (trend, comparison,
+  growth_rate). Có "grounding check": mọi `metric`/`group_by` LLM
+  chọn đều bị đối chiếu lại với `DataProfile` bằng code tất định,
+  raise `QuestionInterpretationError` rõ ràng nếu LLM bịa cột không
+  tồn tại — KHÁC với `O1.enrich()` (module tùy chọn, fail êm), O2 nằm
+  trên đường găng nên fail LOUD có chủ đích.
+- **Mới:** endpoint demo `/interpret` (chạy O1+O2 nối tiếp), theo đúng
+  mẫu đã lập ở Tuần 1 với `/profile`.
+- **Đã kiểm chứng:** ví dụ chạy xuyên suốt đồ án ("phân tích xu hướng
+  12 tháng + chi nhánh giảm mạnh nhất") cho ra đúng khoảng thời gian
+  2025-09 → 2026-08 khớp 100% với dữ liệu thật trong `doanh_thu.csv`.
 
 ### CHANGELOG Tuần 2
 
@@ -92,16 +118,18 @@ ai-agent-bi/
 │   ├── app/
 │   │   ├── main.py             # FastAPI app (CORS, xử lý lỗi upload)
 │   │   ├── schemas.py          # Hợp đồng dữ liệu (I/O) giữa các module
+│   │   ├── llm_client.py       # LLMClient/ClaudeClient dùng chung (từ Tuần 3)
 │   │   └── modules/
 │   │       ├── data_profiler.py         # O1 - đã cài đặt (Stage 1+2)
-│   │       ├── question_interpreter.py  # O2 - stub
+│   │       ├── question_interpreter.py  # O2 - đã cài đặt
 │   │       ├── code_generator.py        # O3a - stub
 │   │       ├── sandbox_executor.py      # O3b - stub
 │   │       ├── chart_generator.py       # O4 - stub
 │   │       └── insight_generator.py     # O5 - stub
 │   └── tests/
-│       ├── test_data_profiler.py   # Stage 1 (7 kịch bản)
-│       └── test_enrichment.py      # Stage 2 (5 kịch bản)
+│       ├── test_data_profiler.py       # O1 Stage 1 (7 kịch bản)
+│       ├── test_enrichment.py          # O1 Stage 2 (5 kịch bản)
+│       └── test_question_interpreter.py # O2 (10 kịch bản)
 └── .github/workflows/ci.yml
 ```
 
