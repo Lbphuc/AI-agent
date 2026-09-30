@@ -39,7 +39,7 @@ Doanh nghiệp vừa và nhỏ thường có dữ liệu kinh doanh dạng bản
 Chủ doanh nghiệp nhỏ, nhân viên kinh doanh/vận hành không có nền tảng kỹ thuật, sinh viên/nhà nghiên cứu muốn khám phá dữ liệu nhanh.
 
 ### 2.3. Giả định và ràng buộc
-- Dữ liệu đầu vào là file CSV có cấu trúc bảng, có ít nhất một cột thời gian và một cột giá trị số.
+- Dữ liệu đầu vào là file CSV hoặc Excel (.xlsx) có cấu trúc bảng, có ít nhất một cột thời gian và một cột giá trị số.
 - Người dùng đặt câu hỏi bằng tiếng Việt.
 - Hệ thống cần kết nối Internet để gọi API LLM (Claude); không hoạt động ở chế độ offline hoàn toàn.
 - Giới hạn 8 tuần phát triển → xem "Phạm vi trong/ngoài" trong Project Proposal.
@@ -61,6 +61,9 @@ Chủ doanh nghiệp nhỏ, nhân viên kinh doanh/vận hành không có nền 
 | FR-09 | Hệ thống hiển thị kết quả tổng hợp (biểu đồ + bảng số liệu + nhận xét) trên giao diện web | Giao diện web | Cao |
 | FR-10 | Hệ thống ghi log lỗi và độ trễ của từng module để phục vụ đánh giá | Toàn hệ thống | Trung bình |
 | FR-11 | Hệ thống áp dụng giá trị mặc định hợp lý khi câu hỏi thiếu thông tin (ví dụ: mặc định "12 tháng gần nhất" nếu không nêu rõ khoảng thời gian) | O2 — Question Interpreter | Trung bình |
+| FR-12 | Hệ thống đọc được file Excel (.xlsx) và CSV với nhiều bảng mã (UTF-8, cp1258) và tự phát hiện dấu phân cách (dấu phẩy/chấm phẩy) | O1 — Data Profiler / main.py | Cao |
+| FR-13 | Hệ thống tự động nhận biết và chuyển đổi số định dạng Việt Nam ("1.500.000") thành giá trị số trước khi phân tích | O1 — Data Profiler (Stage 0) | Cao |
+| FR-14 | Hệ thống cho phép tải lên nhiều file cùng lúc và trả về DataProfile riêng biệt cho từng file (/profile-many) | O1 — Data Profiler / main.py | Trung bình |
 
 ---
 
@@ -108,8 +111,9 @@ Interface chi tiết được định nghĩa bằng Pydantic trong `backend/app/
 |---|---|---|
 | O1 — Data Profiler | `DataFrame` | `DataProfile` (schema, time_column, group_columns, numeric_columns) |
 | O2 — Question Interpreter | `question: str`, `DataProfile` | `AnalysisGoal` (time_scope, time_start, time_end, list[AnalysisTask]) |
-| O3a — Code Generator | `AnalysisGoal`, `DataProfile` | `CodeGenResult` (code, expected_outputs) |
-| O3b — Sandbox Executor | `code: str`, `DataFrame` | `ExecutionResult` (success, results, error, attempts) |
+| O3a — Code Generator | `task: AnalysisTask`, `DataProfile`, `previous_error: str \| None` | `CodeGenResult` (code, expected_outputs) |
+| O3b — Sandbox Executor | `code: str`, `df: DataFrame`, `timeout: int = 5` | `ExecutionResult` (success, results, error, attempts=1) |
+| Orchestrator (O3 Pipeline) | `task: AnalysisTask`, `profile: DataProfile`, `df: DataFrame`, `max_attempts: int = 3` | `ExecutionResult` (kết quả sau retry loop + error feedback) |
 | O4 — Chart Generator | `list[AnalysisTask]`, `ExecutionResult` | `list[ChartSpec]` (chart_type, title, x, series) |
 | O5 — Insight Generator | `question: str`, `ExecutionResult` | `InsightResult` (insight_text, confidence_score) |
 

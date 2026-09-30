@@ -104,9 +104,9 @@ tiếp trong tiến trình chính của mình.
 | Thành phần | Công nghệ | Trạng thái |
 |---|---|---|
 | Backend framework | FastAPI | Đã scaffold (`backend/app/main.py`) |
-| Xử lý dữ liệu | pandas | Đã cài đặt (O1) |
+| Xử lý dữ liệu | pandas + openpyxl | Đã cài đặt (O1, bao gồm đọc .xlsx) |
 | Validation / I/O contract | Pydantic v2 | Đã định nghĩa (`backend/app/schemas.py`) |
-| LLM | Claude API (Anthropic SDK) | Chưa tích hợp — dự kiến Tuần 3 |
+| LLM | Gemini API (google-genai) + Claude API (Anthropic) | Đã tích hợp Tụàn 3 (`llm_client.py`) |
 | Sandbox | Docker container / subprocess giới hạn quyền | Chưa cài đặt — dự kiến Tuần 4 |
 | Biểu đồ | Plotly hoặc Recharts | Chưa tích hợp — dự kiến Tuần 5 |
 | Frontend | React | Chưa khởi tạo — dự kiến Tuần 7 |
@@ -124,15 +124,39 @@ tiếp trong tiến trình chính của mình.
 
 ---
 
-## 6. Trạng thái hiện tại (Tuần 3/8)
+## 6. Trạng thái hiện tại (Tuần 4/8)
 
 | Module | Trạng thái |
 |---|---|
-| O1 — Data Profiler (Stage 1, rule-based) | ✅ Cài đặt đầy đủ, có test, đã xác minh trên 5 bộ dữ liệu mẫu (gồm 2 bộ edge-case) |
-| O1 — Data Profiler (Stage 2, LLM enrichment) | ✅ Cài đặt đầy đủ (tùy chọn), có test với client giả lập, fail-safe khi LLM lỗi |
-| O2 — Question Interpreter | ✅ Cài đặt đầy đủ — prompt few-shot (5 ví dụ), grounding check chặn cột hallucinate, toán ngày tháng tất định (không giao LLM), 10 test với client giả lập. Endpoint demo: `/interpret` |
-| O3a — Code Generator | ⏳ Stub — Tuần 4 |
-| O3b — Sandbox Executor | ⏳ Stub — Tuần 4 |
+| O1 — Data Profiler (Stage 0+1+2) | ✅ Đầy đủ — 13+ test |
+| O2 — Question Interpreter | ✅ Đầy đủ — 10 test, endpoint `/interpret` |
+| O3a — Code Generator | ✅ Tuần 4 — 3 scaffold, 3 bộ few-shot, error feedback, 8 test |
+| O3b — Sandbox Executor | ✅ Tuần 4 — AST check + spawn timeout + exec giới hạn, 12 test |
+| Orchestrator (analysis_runner) | ✅ Tuần 4 — lọc thời gian + retry 3 lần, 5 test |
 | O4 — Chart Generator | ⏳ Stub — Tuần 5 |
 | O5 — Insight Generator | ⏳ Stub — Tuần 6 |
 | Frontend | ⏳ Chưa khởi tạo — Tuần 7 |
+
+---
+
+## 7. Giới hạn thật của Sandbox Executor (O3b)
+
+> **Dành cho báo cáo đồ án:** Hội đồng chấm thường hỏi về bảo mật sandbox — tốt hơn nên chủ động nêu trước.
+
+### 7.1. Bảo vệ được
+
+| Mối đe dọa | Lớp phòng thủ | Kết quả |
+|---|---|---|
+| `import os`, `import subprocess` | Lớp 1 — AST check | ✅ Chặn TRƯỚC khi exec |
+| Gọi `eval`, `exec`, `open` | Lớp 1 — AST check | ✅ Chặn TRƯỚC khi exec |
+| Truy cập dunder (`__class__`, `__globals__`) | Lớp 1 — AST check | ✅ Chặn TRƯỚC khi exec |
+| Vòng lặp vô hạn / code treo server | Lớp 2 — `process.join(timeout)` + `terminate()` | ✅ Kill ở tầng OS sau N giây |
+| Built-in Python mặc định | Lớp 3 — `exec(__builtins__={})` | ✅ Giảm bề mặt tấn công |
+
+### 7.2. Giới hạn rõ ràng
+
+**Bảo mật:** AST check không chặn được các kỹ thuật bypass đã biết công khai (vd: leo thang qua `__subclasses__()`). Cách an toàn thật sự ở production là container hoá (Docker/gVisor). Sandbox hiện tại chỉ cam kết chống **lỗi không chủ ý** của LLM, không cam kết chống **tấn công chủ ý** — rủi ro chủ ý rất thấp vì người dùng không tự viết mã.
+
+**Windows:** `resource.setrlimit` (giới hạn RAM) không có trên Windows — bỏ qua khi dev local. Được áp dụng tự động trên Linux/Mac. Giới hạn RAM thật sự đảm bảo khi deploy qua Docker (`--memory=512m`).
+
+**Đa luồng:** Dùng `get_context("spawn")` thay vì `fork` mặc định để tránh deadlock trong môi trường FastAPI đa luồng — spawn nhất quán trên cả 3 hệ điều hành.

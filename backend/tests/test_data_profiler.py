@@ -86,22 +86,13 @@ def test_profile_ton_kho_missing_values():
 
 
 def test_downstream_modules_raise_not_implemented():
-    """O3-O5 vẫn là stub (chưa tới tuần cài đặt) - xác nhận chúng báo
-    lỗi rõ ràng thay vì âm thầm trả kết quả sai. O2 (Question
-    Interpreter) đã cài đặt thật từ Tuần 3 -> xem
-    backend/tests/test_question_interpreter.py thay vì kiểm tra ở đây."""
-    from backend.app.modules import (
+    """Tuan 6: O3-O5 da duoc implement day du. Test xac nhan import thanh cong.
+    Logic tung module kiem tra rieng tai cac file test tuong ung."""
+    from backend.app.modules import (  # noqa: F401
+        analysis_runner,
         chart_generator,
         code_generator,
         insight_generator,
         sandbox_executor,
     )
-
-    with pytest.raises(NotImplementedError):
-        code_generator.generate(goal=None, profile=None)
-    with pytest.raises(NotImplementedError):
-        sandbox_executor.execute(code="", df=pd.DataFrame())
-    with pytest.raises(NotImplementedError):
-        chart_generator.generate_charts(tasks=[], execution=None)
-    with pytest.raises(NotImplementedError):
-        insight_generator.generate_insight(question="", execution=None)
+    # Tuan 6: Tat ca O3-O5 da implement, khong con NotImplementedError.

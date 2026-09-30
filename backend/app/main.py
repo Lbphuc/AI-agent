@@ -1,22 +1,30 @@
 """AI Agent - Phân tích & Trực quan hóa Dữ liệu Kinh doanh.
 
 Điểm khởi đầu ứng dụng FastAPI. Tuần 1-2: /health, /profile (chạy O1).
-Tuần 3: thêm /interpret (chạy O1 + O2). Endpoint /analyze (ghép đủ 5
-module) sẽ hoàn thiện dần đến Tuần 6 — xem kế hoạch chi tiết tại
-docs/SRS.md (mục 3, danh sách FR) và docs/ARCHITECTURE.md (mục 6,
-bảng trạng thái từng module).
+Tuần 3: thêm /interpret (chạy O1 + O2), /profile-many (nhiều file).
+Tuần 3 (bổ sung): hỗ trợ Excel (.xlsx) + fallback encoding CSV + Stage 0
+làm sạch dữ liệu trong O1 (xem FR-12, ARCHITECTURE.md mục 6).
+Endpoint /analyze (ghép đủ 5 module) sẽ hoàn thiện dần đến Tuần 6 —
+xem kế hoạch chi tiết tại docs/SRS.md (mục 3) và docs/ARCHITECTURE.md.
 """
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, RedirectResponse, Response
+from starlette.concurrency import run_in_threadpool
 
-from .llm_client import ClaudeClient
-from .modules import data_profiler, question_interpreter
-from .schemas import AnalysisGoal, DataProfile
+import logging
+
+from .llm_client import GeminiClient
+from .modules import data_profiler, question_interpreter, analysis_runner, chart_generator, insight_generator
+from .schemas import AnalysisGoal, AnalyzeResponse, ChartSpec, DataProfile, TaskResult
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="AI Agent Phan Tich Du Lieu Kinh Doanh",
@@ -34,111 +42,345 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Danh sach encoding thu theo thu tu uu tien cao→thap (FR-12).
+# utf-8-sig: UTF-8 kem BOM (Excel Windows thuong xuat dinh dang nay).
+# cp1258: code page Viet Nam Windows, pho bien voi file CSV xuat tu
+#   phan mem ke toan/ERP noi dia.
+# latin-1: fallback cuoi cung - doc duoc moi byte, nhung co the hien sai
+#   dau tieng Viet; doi voi file khong co dau, ket qua giong UTF-8.
+_CSV_ENCODINGS = ["utf-8-sig", "utf-8", "cp1258", "latin-1"]
+
+
+def _read_excel(content: bytes, ext: str) -> pd.DataFrame:
+    """Doc file Excel (.xlsx/.xls), raise HTTPException(400) neu loi.
+
+    Luu y: .xls (dinh dang cu, truoc Excel 2007) can them thu vien
+    xlrd>=2.0. Hien tai chi ho tro .xlsx (openpyxl). Neu gap .xls,
+    HTTPException se bao ro de nguoi dung chuyen doi sang .xlsx.
+    """
+    try:
+        return pd.read_excel(io.BytesIO(content))
+    except Exception as exc:
+        msg = (
+            f"Khong doc duoc file Excel ({exc.__class__.__name__}). "
+        )
+        if ext == ".xls":
+            msg += (
+                "Dinh dang .xls (Excel 97-2003) chua duoc ho tro. "
+                "Vui long mo file trong Excel va luu lai dang .xlsx."
+            )
+        else:
+            msg += "Kiem tra file co bi hong hoac dat mat khau khong."
+        raise HTTPException(status_code=400, detail=msg) from exc
+
+
+def _read_csv_with_fallback(content: bytes) -> pd.DataFrame:
+    """Doc CSV voi fallback qua nhieu encoding va tu phat hien dau phan cach.
+
+    Uu tien C engine mac dinh de doc file sieu nhanh. Neu gap loi phan
+    cach (vi du file dung dau cham phay ';' hoac tab), fallback qua
+    Python engine voi sep=None de tu phat hien.
+    """
+    # 1. Thu nhanh bang C engine mac dinh (sep=',')
+    for encoding in _CSV_ENCODINGS:
+        try:
+            return pd.read_csv(io.BytesIO(content), encoding=encoding)
+        except Exception:
+            continue
+
+    # 2. Fallback qua Python engine de tu dong do dau phan cach (; hoac tab)
+    last_error: Exception | None = None
+    for encoding in _CSV_ENCODINGS:
+        try:
+            return pd.read_csv(
+                io.BytesIO(content),
+                encoding=encoding,
+                sep=None,
+                engine="python",
+            )
+        except (UnicodeDecodeError, pd.errors.ParserError) as exc:
+            last_error = exc
+            continue
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "Khong doc duoc file CSV voi cac bang ma pho bien "
+            "(UTF-8, cp1258, latin-1). "
+            "Vui long luu lai file dang CSV UTF-8 hoac doi sang .xlsx."
+        ),
+    ) from last_error
+
+
+async def _read_uploaded_file(file: UploadFile) -> pd.DataFrame:
+    """Doc file CSV hoac Excel tai len, tra HTTPException(400) neu loi.
+
+    Doi ten tu _read_csv_upload (Tuan 1-2) sang _read_uploaded_file
+    (Tuan 3 bo sung) vi gio ho tro nhieu dinh dang: .csv, .xlsx, .xls.
+    Ca /profile, /interpret, /profile-many deu dung ham nay — sua 1
+    cho, ca he thong duoc loi (DRY).
+
+    Phan loai theo duoi file:
+    - .xlsx / .xls  → _read_excel()
+    - Con lai (ke ca .csv, .txt, .tsv) → _read_csv_with_fallback()
+      (khong chan cung theo duoi de tranh bi loi voi file dat ten sai
+      chinh ta nhung noi dung van la CSV hop le)
+
+    Raises:
+        HTTPException(400): file rong, khong doc duoc, hoac DataFrame
+            rong sau khi doc thanh cong.
+    """
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="File rong hoac khong doc duoc.")
+
+    ext = Path(file.filename or "").suffix.lower()
+    if ext in (".xlsx", ".xls"):
+        df = _read_excel(content, ext)
+    else:
+        df = _read_csv_with_fallback(content)
+
+    if df.empty:
+        raise HTTPException(
+            status_code=400,
+            detail="File khong co du lieu (chi co header hoac toan o trong).",
+        )
+    return df
+
+
+@app.get("/", include_in_schema=False, response_model=None)
+def root() -> Response:
+    """Tra ve giao dien Web Demo truc quan O1 -> O5 (hoac chuyen huong sang /docs)."""
+    html_path = Path(__file__).resolve().parent.parent.parent / "tools" / "preview_charts.html"
+    if html_path.exists():
+        return FileResponse(html_path, media_type="text/html")
+    return RedirectResponse(url="/docs")
+
+
+@app.get("/demo", include_in_schema=False, response_class=FileResponse)
+def demo() -> FileResponse:
+    """Endpoint Web Demo truc quan: http://localhost:8000/demo."""
+    html_path = Path(__file__).resolve().parent.parent.parent / "tools" / "preview_charts.html"
+    if not html_path.exists():
+        raise HTTPException(status_code=404, detail="Khong tim thay file tools/preview_charts.html")
+    return FileResponse(html_path, media_type="text/html")
+
 
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
 
 
-async def _read_csv_upload(file: UploadFile) -> pd.DataFrame:
-    """Đọc file CSV tải lên, trả HTTPException(400) sạch nếu lỗi.
-
-    Dùng chung cho mọi endpoint nhận file CSV (/profile, /interpret,
-    và sau này /analyze) — tránh lặp lại cùng một khối try/except.
-
-    Raises:
-        HTTPException(400): file rỗng, không phải CSV hợp lệ, hoặc
-            pandas không đọc được — trả thông báo lỗi gọn cho client
-            thay vì để lộ traceback thô (NFR-04).
-    """
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="File rong hoac khong doc duoc.")
-
+@app.get("/debug-llm")
+def debug_llm() -> dict:
+    """Kiểm tra API key và thử gọi LLM — dùng để debug khi /interpret bị lỗi."""
+    import os
+    key = os.environ.get("GEMINI_API_KEY", "")
+    result = {
+        "key_loaded": bool(key),
+        "key_prefix": key[:12] + "..." if key else "(trống)",
+        "models_tried": [],
+    }
     try:
-        df = pd.read_csv(io.BytesIO(content))
-    except Exception as exc:
-        # Day la tang bien (API boundary) xu ly input tu nguoi dung ben
-        # ngoai - CO CHU DICH bat rong (khac voi enrich() o tang logic
-        # noi bo, noi bat rong co the che giau bug that). pandas co the
-        # nem nhieu loai loi khac nhau tuy noi dung file loi (ParserError,
-        # EmptyDataError, UnicodeDecodeError, ValueError...) - muc tieu
-        # o day la KHONG BAO GIO de traceback tho lot ra ngoai cho client.
-        raise HTTPException(
-            status_code=400,
-            detail=f"Khong the doc file CSV: {exc.__class__.__name__}. "
-            "Vui long kiem tra dinh dang file (dau phay, ma hoa UTF-8).",
-        ) from exc
-
-    if df.empty:
-        raise HTTPException(
-            status_code=400, detail="File CSV khong co du lieu (chi co header)."
-        )
-    return df
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=key)
+        for model in ["gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-3.6-flash"]:
+            try:
+                resp = client.models.generate_content(
+                    model=model,
+                    contents="Say OK",
+                    config=types.GenerateContentConfig(response_mime_type="application/json"),
+                )
+                result["models_tried"].append({"model": model, "status": "OK", "text": str(resp.text)[:30]})
+                result["working_model"] = model
+                break
+            except Exception as e:
+                result["models_tried"].append({"model": model, "status": "ERROR", "error": str(e)[:80]})
+    except Exception as e:
+        result["init_error"] = str(e)
+    return result
 
 
 @app.post("/profile", response_model=DataProfile)
 async def profile_csv(file: UploadFile = File(...)) -> DataProfile:
-    """Endpoint tạm thời: chỉ chạy Data Profiler (O1) trên file CSV tải lên.
+    """Chay Data Profiler (O1 — Stage 1 + Stage 0 lam sach) tren file tai len.
 
-    Dùng để kiểm thử/demo module O1 độc lập trước khi pipeline đầy đủ
-    (O2-O5) sẵn sàng.
+    Ho tro: .csv (UTF-8, cp1258, dau phay/cham phay), .xlsx.
+    Dung de kiem thu/demo module O1 doc lap truoc khi pipeline day du
+    (O2-O5) san sang.
     """
-    df = await _read_csv_upload(file)
+    df = await _read_uploaded_file(file)
     return data_profiler.profile(df)
+
+
+@app.post("/profile-many")
+async def profile_many(files: list[UploadFile] = File(...)) -> dict[str, DataProfile]:
+    """Tra ve DataProfile RIENG BIET cho tung file — KHONG join/lien ket
+    gi giua cac file.
+
+    Muc dich: cho phep nguoi dung xem truoc schema cua nhieu file truoc
+    khi chon file nao de dat cau hoi phan tich. Viec phan tich cheo
+    nhieu bang (join) nam ngoai pham vi MVP — xem docs/SRS.md muc 4
+    (Ngoai pham vi).
+
+    Raises:
+        HTTPException(400): danh sach file rong.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="Can upload it nhat 1 file.")
+
+    result: dict[str, DataProfile] = {}
+    for f in files:
+        df = await _read_uploaded_file(f)
+        result[f.filename or "unnamed"] = data_profiler.profile(df)
+    return result
 
 
 @app.post("/interpret", response_model=AnalysisGoal)
 async def interpret_question(
     file: UploadFile = File(...), question: str = Form(...)
 ) -> AnalysisGoal:
-    """Endpoint tạm thời Tuần 3: chạy O1 + O2 (chưa chạy O3-O5).
+    """Endpoint Tuan 3: chay O1 + O2 (chua chay O3-O5).
 
-    Dùng để kiểm thử/demo việc phân rã câu hỏi thành mục tiêu phân
-    tích có cấu trúc, trước khi O3 (sinh + thực thi mã) sẵn sàng ở
-    Tuần 4.
+    Dung de kiem thu/demo viec phan ra cau hoi thanh muc tieu phan
+    tich co cau truc, truoc khi O3 (sinh + thuc thi ma) san sang o
+    Tuan 4.
 
-    LƯU Ý: endpoint này gọi Claude API THẬT (qua ClaudeClient), nên
-    cần biến môi trường ANTHROPIC_API_KEY hợp lệ khi triển khai/chạy
-    thử. Không thể kiểm thử qua HTTP trong môi trường phát triển hiện
-    tại (không có mạng) — logic O2 đã được kiểm chứng đầy đủ bằng
-    client giả lập trong backend/tests/test_question_interpreter.py.
+    LLM: GeminiClient (doc API key tu bien moi truong GEMINI_API_KEY
+    hoac file .env — xem backend/app/llm_client.py).
 
     Raises:
-        HTTPException(422): câu hỏi không hiểu được / tham chiếu cột
-            không tồn tại — xem question_interpreter.QuestionInterpretationError.
+        HTTPException(422): cau hoi khong hieu duoc / tham chieu cot
+            khong ton tai — xem question_interpreter.QuestionInterpretationError.
     """
-    df = await _read_csv_upload(file)
-    profile = data_profiler.profile(df)
+    df = await _read_uploaded_file(file)
+    profile = await run_in_threadpool(data_profiler.profile, df)
     try:
-        return question_interpreter.interpret(question, profile, llm=ClaudeClient())
+        llm = GeminiClient()
+        return await run_in_threadpool(
+            question_interpreter.interpret, question, profile, llm
+        )
     except question_interpreter.QuestionInterpretationError as exc:
+        err_msg = str(exc)
+        # Phân biệt lỗi hạ tầng (503/network) vs lỗi logic (câu hỏi sai)
+        if "503" in err_msg or "UNAVAILABLE" in err_msg or "LLM API" in err_msg:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    f"Dịch vụ LLM đang quá tải hoặc không khả dụng: {err_msg}. "
+                    "Vui lòng thử lại sau vài giây."
+                ),
+            ) from exc
         raise HTTPException(
             status_code=422,
-            detail=f"Khong hieu duoc cau hoi: {exc} "
-            "Vui long thu dat cau hoi ro rang hon, hoac neu ro chi nhanh/cot du lieu ban muon phan tich.",
+            detail=(
+                f"Không hiểu được câu hỏi: {err_msg} "
+                "Vui lòng thử đặt câu hỏi rõ ràng hơn, hoặc nêu rõ "
+                "chi nhánh/cột dữ liệu bạn muốn phân tích."
+            ),
         ) from exc
 
 
-@app.post("/analyze")
-async def analyze(file: UploadFile = File(...), question: str = Form(...)) -> dict:
-    """Endpoint chính của hệ thống (FR-01 đến FR-09).
+@app.post("/chart-preview", response_model=list[ChartSpec])
+async def chart_preview(
+    file: UploadFile = File(...), question: str = Form(...)
+) -> list[ChartSpec]:
+    """Endpoint demo Tuan 5: chay O1 -> O2 -> O3 -> O4 va tra list[ChartSpec].
 
-    TODO (Tuần 3-6): ghép nối đủ 5 module theo đúng luồng mô tả trong
-    docs/ARCHITECTURE.md:
-        1. data_profiler.profile(df)          -> DataProfile
-        2. question_interpreter.interpret(...) -> AnalysisGoal
-        3. code_generator.generate(...)        -> CodeGenResult
-        4. sandbox_executor.execute(...)       -> ExecutionResult
-        5. chart_generator.generate_charts(...) -> list[ChartSpec]
-        6. insight_generator.generate_insight(...) -> InsightResult
-    Hiện tại trả về placeholder để frontend (Tuần 7) có thể tích hợp
-    và kiểm thử giao diện trước khi backend hoàn thiện.
+    Giu lai sau Tuan 6 de debug tung buoc (khong can insight).
     """
-    return {
-        "status": "not_implemented",
-        "message": "O1+O2 da san sang (xem /profile, /interpret). "
-        "O3-O5 se duoc trien khai tu Tuan 4.",
-        "question": question,
-        "filename": file.filename,
-    }
+    df = await _read_uploaded_file(file)
+    profile = await run_in_threadpool(data_profiler.profile, df)
+    try:
+        llm = GeminiClient()
+        goal = await run_in_threadpool(
+            question_interpreter.interpret, question, profile, llm
+        )
+    except question_interpreter.QuestionInterpretationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    task_results: list[TaskResult] = []
+    for task in goal.tasks:
+        exec_result = await run_in_threadpool(
+            analysis_runner.run_task, task, goal, profile, df, llm
+        )
+        task_results.append(TaskResult(task=task, execution=exec_result))
+
+    charts = chart_generator.generate_charts(task_results)
+    return charts
+
+
+@app.post("/analyze", response_model=AnalyzeResponse)
+async def analyze(
+    file: UploadFile = File(...), question: str = Form(...)
+) -> AnalyzeResponse:
+    """Endpoint chinh cua he thong (FR-01 den FR-09) — Pipeline end-to-end.
+
+    Tuan 6: hoan chinh O1 -> O2 -> O3 -> O4 -> O5.
+    Tra AnalyzeResponse day du (goal, task_results, charts, insight).
+
+    Xu ly loi tung phan (partial failure):
+    - 1 task O3 loi: task do bi bo qua, cac task khac van chay.
+    - Insight loi (InsightGenerationError): van tra charts, insight=None.
+    - Ca charts lan insight deu rong: 422 (khong co gi tra ve).
+    """
+    df = await _read_uploaded_file(file)
+    profile = await run_in_threadpool(data_profiler.profile, df)
+
+    # Kiem tra so: khong co cot so -> cham som, tranh O2 xu ly vo nghia
+    if not profile.numeric_columns:
+        raise HTTPException(
+            status_code=422,
+            detail="File khong co cot so nao de phan tich.",
+        )
+
+    llm = GeminiClient()
+
+    try:
+        goal = await run_in_threadpool(
+            question_interpreter.interpret, question, profile, llm
+        )
+    except question_interpreter.QuestionInterpretationError as exc:
+        raise HTTPException(
+            status_code=422, detail=f"Khong hieu duoc cau hoi: {exc}"
+        ) from exc
+
+    # O3: chay tung task, loi tung phan khong chan nhau
+    task_results: list[TaskResult] = []
+    for task in goal.tasks:
+        exec_result = await run_in_threadpool(
+            analysis_runner.run_task, task, goal, profile, df, llm
+        )
+        task_results.append(TaskResult(task=task, execution=exec_result))
+
+    # O4: sinh ChartSpec (tat dinh, khong LLM)
+    charts = await run_in_threadpool(chart_generator.generate_charts, task_results)
+
+    # O5: sinh insight (goi LLM), loi khong chan toan bo response
+    insight_result = None
+    try:
+        insight_result = await run_in_threadpool(
+            insight_generator.generate_insight, question, task_results, llm
+        )
+    except insight_generator.InsightGenerationError as exc:
+        logger.warning("Khong sinh duoc insight: %s", exc)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Loi bat ngo khi sinh insight: %s", exc)
+
+    # Neu ca charts lan insight deu rong -> khong co gi tra ve -> 422
+    if not charts and insight_result is None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Khong tinh toan duoc gi tu cau hoi nay. "
+                "Kiem tra log server de biet chi tiet loi."
+            ),
+        )
+
+    return AnalyzeResponse(
+        goal=goal,
+        task_results=task_results,
+        charts=charts,
+        insight=insight_result,
+    )
+

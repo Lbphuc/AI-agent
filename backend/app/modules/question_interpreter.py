@@ -261,6 +261,10 @@ def interpret(question: str, profile: DataProfile, llm: LLMClient) -> AnalysisGo
         raw = llm.complete_json(prompt)
     except json.JSONDecodeError as exc:
         raise QuestionInterpretationError(f"LLM trả về JSON không hợp lệ: {exc}") from exc
+    except Exception as exc:
+        # Bắt mọi lỗi API (503 UNAVAILABLE, network error, ...) — tránh 500
+        logger.error("Lỗi khi gọi LLM API: %s", exc, exc_info=True)
+        raise QuestionInterpretationError(f"Lỗi khi gọi LLM API: {exc}") from exc
 
     if not isinstance(raw, dict):
         raise QuestionInterpretationError(

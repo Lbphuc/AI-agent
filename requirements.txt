@@ -5,8 +5,11 @@ uvicorn[standard]>=0.29
 # trong README.md). Chan tran <5 de tranh thay doi breaking chua biet
 # truoc trong tuong lai.
 pandas>=2.2,<5.0
+openpyxl>=3.1          # doc file .xlsx (yeu cau boi pandas read_excel)
 pydantic>=2.6
 anthropic>=0.34
+google-genai>=1.0      # GeminiClient (Tuan 3)
+python-dotenv>=1.0     # doc file .env cho API keys
 python-multipart>=0.0.9
 pytest>=8.0
 httpx>=0.27

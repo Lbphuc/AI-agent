@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chart Preview — O4 Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --border: #2d3148;
+            --accent: #6c63ff;
+            --accent2: #ff6584;
+            --text: #e2e8f0;
+            --muted: #718096;
+            --success: #48bb78;
+            --error: #fc8181;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+            padding: 32px 24px;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        header h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        header p { color: var(--muted); font-size: 0.9rem; margin-top: 6px; }
+
+        .form-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 700px;
+            margin: 0 auto 32px;
+        }
+        .form-row { margin-bottom: 16px; }
+        label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
+        input[type="file"], input[type="text"], textarea {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            padding: 10px 14px;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input[type="file"]:hover, input[type="text"]:focus, textarea:focus {
+            border-color: var(--accent);
+        }
+        .form-row-url { display: flex; gap: 10px; align-items: flex-end; }
+        .form-row-url input { flex: 1; }
+        button {
+            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 11px 24px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        button:hover { opacity: 0.9; }
+        button:active { transform: scale(0.98); }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        #status-bar {
+            text-align: center;
+            font-size: 0.88rem;
+            color: var(--muted);
+            margin-bottom: 20px;
+            min-height: 22px;
+            transition: color 0.3s;
+        }
+        #status-bar.error { color: var(--error); }
+        #status-bar.success { color: var(--success); }
+
+        #charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+            gap: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .chart-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px 20px 14px;
+            animation: fadeIn 0.35s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .chart-card h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .chart-meta {
+            font-size: 0.78rem;
+            color: var(--muted);
+            margin-bottom: 14px;
+        }
+        .chart-meta span {
+            display: inline-block;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 2px 7px;
+            margin-right: 6px;
+        }
+        .highlight-badge {
+            display: inline-block;
+            background: rgba(255, 101, 132, 0.15);
+            border: 1px solid var(--accent2);
+            color: var(--accent2);
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 0.78rem;
+            margin-top: 8px;
+        }
+        .chart-wrap { position: relative; height: 280px; }
+
+        #raw-json {
+            max-width: 1200px;
+            margin: 32px auto 0;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+        }
+        #raw-json summary {
+            cursor: pointer;
+            font-size: 0.88rem;
+            color: var(--muted);
+            user-select: none;
+        }
+        #raw-json pre {
+            margin-top: 12px;
+            font-size: 0.8rem;
+            color: #a0aec0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        /* Insight Card (O5) */
+        .insight-card {
+            background: linear-gradient(135deg, rgba(108, 99, 255, 0.12), rgba(255, 101, 132, 0.06));
+            border: 1px solid var(--accent);
+            border-radius: 12px;
+            padding: 22px 24px;
+            max-width: 1200px;
+            margin: 0 auto 28px;
+            animation: fadeIn 0.4s ease;
+        }
+        .insight-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .insight-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .confidence-badge {
+            background: rgba(72, 187, 120, 0.15);
+            border: 1px solid var(--success);
+            color: var(--success);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+        .insight-text {
+            color: #e2e8f0;
+            font-size: 0.98rem;
+            line-height: 1.65;
+            white-space: pre-wrap;
+        }
+        .goal-badge {
+            margin-top: 12px;
+            font-size: 0.82rem;
+            color: var(--muted);
+            background: rgba(0, 0, 0, 0.25);
+            padding: 8px 12px;
+            border-radius: 6px;
+            border-left: 3px solid var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🤖 AI Agent BI — Pipeline Demo O1 → O5</h1>
+        <p>Pipeline end-to-end: O1 (Profile) → O2 (Goal) → O3 (Code &amp; Sandbox) → O4 (Chart) → O5 (Insight) | <a href="/docs" style="color: var(--accent); text-decoration: underline;" target="_blank">Xem API Swagger Docs</a></p>
+    </header>
+
+    <div class="form-card">
+        <div class="form-row">
+            <label>Backend Endpoint</label>
+            <div class="form-row-url">
+                <input type="text" id="api-url" value="/analyze" />
+            </div>
+            <div style="font-size: 0.78rem; color: var(--muted); margin-top: 4px;">
+                Mặc định dùng <code>/analyze</code> (O1-O5 đầy đủ). Có thể đổi sang <code>/chart-preview</code> (chỉ O1-O4).
+            </div>
+        </div>
+        <div class="form-row">
+            <label>File CSV/Excel</label>
+            <input type="file" id="data-file" accept=".csv,.xlsx" />
+        </div>
+        <div class="form-row">
+            <label>Cau hoi phan tich</label>
+            <input type="text" id="question" value="Chi nhanh nao giam doanh thu manh nhat trong 12 thang gan nhat?" />
+        </div>
+        <button id="run-btn" onclick="runAnalysis()">Phan tich &amp; Ve bieu do</button>
+    </div>
+
+    <div id="status-bar"></div>
+    <div id="insight-container"></div>
+    <div id="charts-grid"></div>
+    <details id="raw-json">
+        <summary>Xem JSON tra ve tu API</summary>
+        <pre id="raw-pre"></pre>
+    </details>
+
+    <script>
+        // Luu cac doi tuong Chart.js de destroy truoc khi render moi
+        const _chartInstances = [];
+
+        function setStatus(msg, type = '') {
+            const el = document.getElementById('status-bar');
+            el.textContent = msg;
+            el.className = type;
+        }
+
+        function destroyCharts() {
+            _chartInstances.forEach(c => c.destroy());
+            _chartInstances.length = 0;
+        }
+
+        // Mau sac mac dinh cho series
+        const PALETTE = [
+            '#6c63ff', '#ff6584', '#48bb78', '#f6ad55',
+            '#63b3ed', '#fc8181', '#9f7aea', '#68d391',
+        ];
+
+        // Mau do (accent2) cho highlight_x
+        const HIGHLIGHT_COLOR = 'rgba(255, 101, 132, 0.85)';
+        const DEFAULT_COLOR   = 'rgba(108, 99, 255, 0.75)';
+
+        function buildChartColors(labels, highlightX) {
+            if (!highlightX) return labels.map(() => DEFAULT_COLOR);
+            return labels.map(l => l === highlightX ? HIGHLIGHT_COLOR : DEFAULT_COLOR);
+        }
+
+        function renderChart(spec, idx) {
+            const grid = document.getElementById('charts-grid');
+            const card = document.createElement('div');
+            card.className = 'chart-card';
+
+            const typeLabel = spec.chart_type === 'line' ? 'Line chart' : 'Bar chart';
+            const seriesKeys = Object.keys(spec.series);
+
+            let highlightHtml = '';
+            if (spec.highlight_x) {
+                highlightHtml = `<div class="highlight-badge">📍 Noi bat: <strong>${spec.highlight_x}</strong></div>`;
+            }
+
+            card.innerHTML = `
+                <h3>${spec.title}</h3>
+                <div class="chart-meta">
+                    <span>${typeLabel}</span>
+                    <span>${spec.x.length} diem</span>
+                    <span>${seriesKeys.length} series</span>
+                </div>
+                ${highlightHtml}
+                <div class="chart-wrap" style="margin-top: ${spec.highlight_x ? '10px' : '0'}">
+                    <canvas id="chart-${idx}"></canvas>
+                </div>`;
+            grid.appendChild(card);
+
+            const ctx = document.getElementById(`chart-${idx}`).getContext('2d');
+
+            const datasets = seriesKeys.map((key, si) => {
+                const colors = buildChartColors(spec.x, spec.highlight_x);
+                const base = PALETTE[si % PALETTE.length];
+
+                if (spec.chart_type === 'bar') {
+                    return {
+                        label: key,
+                        data: spec.series[key],
+                        backgroundColor: colors,
+                        borderColor: colors.map(c => c),
+                        borderWidth: 1,
+                        borderRadius: 5,
+                    };
+                } else {
+                    // line
+                    return {
+                        label: key,
+                        data: spec.series[key],
+                        borderColor: base,
+                        backgroundColor: base + '25',
+                        tension: 0.35,
+                        fill: true,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                    };
+                }
+            });
+
+            const instance = new Chart(ctx, {
+                type: spec.chart_type,
+                data: { labels: spec.x, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#e2e8f0', font: { size: 12 } } },
+                        tooltip: { backgroundColor: '#1a1d27', borderColor: '#2d3148', borderWidth: 1 },
+                    },
+                    scales: {
+                        x: { ticks: { color: '#718096', maxRotation: 45 }, grid: { color: '#2d3148' } },
+                        y: { ticks: { color: '#718096' }, grid: { color: '#2d3148' } },
+                    },
+                },
+            });
+            _chartInstances.push(instance);
+        }
+
+        function renderInsight(insight, goal) {
+            const container = document.getElementById('insight-container');
+            const card = document.createElement('div');
+            card.className = 'insight-card';
+
+            const score = Math.round((insight.confidence_score ?? 0) * 100);
+            let goalHtml = '';
+            if (goal && goal.hypothesis) {
+                goalHtml = `<div class="goal-badge">🎯 <strong>Mục tiêu phân tích (O2):</strong> ${goal.hypothesis} (${goal.tasks.length} tasks)</div>`;
+            }
+
+            card.innerHTML = `
+                <div class="insight-header">
+                    <div class="insight-title">💡 Nhận xét kinh doanh (Insight — O5)</div>
+                    <div class="confidence-badge">Độ tin cậy số học: ${score}%</div>
+                </div>
+                <div class="insight-text">${insight.insight_text}</div>
+                ${goalHtml}
+            `;
+            container.appendChild(card);
+        }
+
+        async function runAnalysis() {
+            let url = document.getElementById('api-url').value.trim();
+            if (window.location.protocol === 'file:' && url.startsWith('/')) {
+                url = 'http://127.0.0.1:8000' + url;
+            }
+            const fileInput = document.getElementById('data-file');
+            const question = document.getElementById('question').value.trim();
+            const btn = document.getElementById('run-btn');
+
+            if (!fileInput.files.length) {
+                setStatus('Vui long chon file CSV/Excel truoc.', 'error');
+                return;
+            }
+            if (!question) {
+                setStatus('Vui long nhap cau hoi.', 'error');
+                return;
+            }
+
+            btn.disabled = true;
+            setStatus('Dang gui yeu cau len backend (dang chay pipeline AI Agent)...');
+            destroyCharts();
+            document.getElementById('insight-container').innerHTML = '';
+            document.getElementById('charts-grid').innerHTML = '';
+            document.getElementById('raw-pre').textContent = '';
+
+            const form = new FormData();
+            form.append('file', fileInput.files[0]);
+            form.append('question', question);
+
+            try {
+                const resp = await fetch(url, { method: 'POST', body: form });
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    setStatus(`Loi ${resp.status}: ${err}`, 'error');
+                    return;
+                }
+                const result = await resp.json();
+                document.getElementById('raw-pre').textContent = JSON.stringify(result, null, 2);
+
+                let charts = [];
+                let insight = null;
+                let goal = null;
+
+                if (Array.isArray(result)) {
+                    // Endpoint /chart-preview
+                    charts = result;
+                } else if (result && typeof result === 'object') {
+                    // Endpoint /analyze (AnalyzeResponse)
+                    charts = result.charts || [];
+                    insight = result.insight;
+                    goal = result.goal;
+                }
+
+                if (insight && insight.insight_text) {
+                    renderInsight(insight, goal);
+                }
+
+                if (!charts.length && !insight) {
+                    setStatus('Backend tra ve danh sach rong — kiem tra log server.', 'error');
+                    return;
+                }
+
+                charts.forEach((spec, i) => renderChart(spec, i));
+                const totalSeries = charts.reduce((a, c) => a + Object.keys(c.series).length, 0);
+                setStatus(`Hoan thanh thanh cong — Sinh ${charts.length} bieu do (${totalSeries} series)${insight ? ' va 1 ban phan tich Insight' : ''}.`, 'success');
+            } catch (e) {
+                setStatus(`Loi ket noi: ${e.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // Enter de submit
+        document.getElementById('question').addEventListener('keydown', e => {
+            if (e.key === 'Enter') runAnalysis();
+        });
+    </script>
+</body>
+</html>

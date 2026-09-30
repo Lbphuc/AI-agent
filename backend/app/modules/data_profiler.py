@@ -4,6 +4,10 @@ Trích xuất schema, kiểu dữ liệu, thống kê mô tả, và nhận diệ
 gian / cột nhóm (định danh) / cột số từ một DataFrame (Stage 1), cộng
 thêm một bước làm giàu ngữ nghĩa tùy chọn bằng LLM (Stage 2).
 
+- **Stage 0** (`_clean()`): làm sạch tối thiểu TRƯỚC khi đoán kiểu cột
+  — trim tên cột, xóa cột/dòng rỗng, chuyển số định dạng Việt Nam
+  ("1.500.000") thành float. Bắt buộc chạy trước Stage 1 để tránh
+  bug nhầm dtype với dữ liệu Excel thực tế (FR-12).
 - **Stage 1** (`profile()`): xử lý THUẦN TÚY BẰNG LUẬT (rule-based) —
   không gọi LLM — tương ứng Stage 1 (base summary generation) của
   SUMMARIZER trong LIDA (Dibia, 2023).
@@ -22,6 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import warnings
 
 import pandas as pd
@@ -30,6 +35,95 @@ from ..llm_client import LLMClient
 from ..schemas import ColumnProfile, DataProfile
 
 logger = logging.getLogger(__name__)
+
+# Pattern so dinh dang Viet Nam: 1.500.000 hoac 1.500.000,50
+# Giai thich:
+#   ^-?          : tuy chon dau tru
+#   \d{1,3}      : 1-3 chu so dau
+#   (\.\d{3})*   : khong hoac nhieu nhom .000 (dau cham = ngan phan)
+#   (,\d+)?$     : tuy chon phan thap phan dung dau phay
+_VN_NUMBER_PATTERN = re.compile(r"^-?\d{1,3}(\.\d{3})*(,\d+)?$")
+
+
+# =============================================================================
+# Stage 0 — Làm sạch dữ liệu tối thiểu (chạy TRƯỚC Stage 1)
+# =============================================================================
+
+
+def _drop_empty_unnamed_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Xoa cot 'Unnamed: N' (Excel xuat du) chi khi rong hoan toan.
+
+    Chi xoa khi vua khop ten 'Unnamed: N' VUA rong hoan toan — tranh
+    xoa nham cot that su co du lieu chi vi khong co ten.
+    """
+    to_drop = [
+        col for col in df.columns
+        if re.match(r"^Unnamed: \d+$", str(col)) and df[col].isna().all()
+    ]
+    return df.drop(columns=to_drop)
+
+
+def _strip_string_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Loai bo khoang trang thua o dau/cuoi gia tri trong cot chuoi."""
+    for col in df.columns:
+        if pd.api.types.is_string_dtype(df[col]):
+            df[col] = df[col].str.strip()
+    return df
+
+
+def _convert_vn_formatted_numbers(
+    df: pd.DataFrame, min_match_ratio: float = 0.8
+) -> pd.DataFrame:
+    """Chuyen cot text dang '1.500.000' (kieu VN) thanh so thuc (float).
+
+    Chi chuyen neu >= min_match_ratio gia tri khong null trong cot khop
+    _VN_NUMBER_PATTERN — tranh chuyen nham cot text thuong co vai gia
+    tri tinh co giong so.
+
+    Nguyen tac chuyen doi:
+      '1.500.000'  -> xoa dau cham -> '1500000'   -> 1500000.0
+      '1.500,50'   -> xoa cham, doi phay thanh cham -> '1500.50' -> 1500.5
+    """
+    for col in df.columns:
+        if not pd.api.types.is_string_dtype(df[col]):
+            continue
+        non_null = df[col].dropna()
+        if non_null.empty:
+            continue
+        match_ratio = non_null.str.match(_VN_NUMBER_PATTERN).mean()
+        if match_ratio >= min_match_ratio:
+            converted = (
+                non_null
+                .str.replace(".", "", regex=False)
+                .str.replace(",", ".", regex=False)
+                .astype(float)
+            )
+            df[col] = converted.reindex(df.index)
+    return df
+
+
+def _clean(df: pd.DataFrame) -> pd.DataFrame:
+    """Lam sach toi thieu (Stage 0) TRUOC khi doan kieu cot (Stage 1).
+
+    Thu tu thuc hien co chu y:
+    1. Trim ten cot — dam bao step sau khop ten chinh xac.
+    2. Xoa cot Unnamed rong — giam nhieu tu dinh dang Excel du.
+    3. Xoa dong rong hoan toan — giam nhieu dinh dang Excel.
+    4. Trim gia tri chuoi — can lam truoc khi match pattern so.
+    5. Chuyen so VN ('1.500.000') — phai sau trim de pattern khop dung.
+
+    CO Y KHONG lam:
+    - Tu do vi tri dong header (qua nhieu heuristic, de vo).
+    - Xu ly o merge (merged cells) trong Excel.
+    - Tu sua loi chinh ta ten cot.
+    """
+    df = df.copy()
+    df.columns = df.columns.str.strip()
+    df = _drop_empty_unnamed_columns(df)
+    df = df.dropna(axis=0, how="all").reset_index(drop=True)
+    df = _strip_string_columns(df)
+    df = _convert_vn_formatted_numbers(df)
+    return df
 
 
 def _guess_time_column(df: pd.DataFrame) -> str | None:
@@ -105,13 +199,16 @@ def profile(df: pd.DataFrame, n_samples: int = 3) -> DataProfile:
     """Sinh bản tóm tắt (profile) cho một DataFrame.
 
     Args:
-        df: DataFrame đã đọc từ file CSV do người dùng tải lên.
+        df: DataFrame đã đọc từ file CSV/Excel do người dùng tải lên.
         n_samples: số giá trị mẫu (không null, duy nhất) lấy cho mỗi cột.
 
     Returns:
         DataProfile — dùng làm ngữ cảnh nền (grounding context) cho
         module Question Interpreter (O2) ở bước tiếp theo.
     """
+    # Stage 0: lam sach TRUOC khi doan kieu cot — thu tu bat buoc
+    # (xem ly do chi tiet trong docstring _clean()).
+    df = _clean(df)
     time_col = _guess_time_column(df)
     time_min, time_max = _time_range(df, time_col)
     group_cols = _guess_group_columns(df, time_col)

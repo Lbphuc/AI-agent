@@ -1,10 +1,10 @@
-"""Hợp đồng dữ liệu (I/O contract) giữa các module trong pipeline.
+"""Hop dong du lieu (I/O contract) giua cac module trong pipeline.
 
-Mỗi model tương ứng với đầu vào/đầu ra của một module được mô tả trong
-docs/SRS.md (mục 6) và docs/ARCHITECTURE.md. Việc định nghĩa tường minh
-các schema này ngay từ Tuần 1 giúp các module (O1-O5) có thể được phát
-triển và kiểm thử độc lập trong các tuần tiếp theo, đúng tinh thần
-"flexible / modular" mà LIDA (Dibia, 2023) đề xuất.
+Moi model tuong ung voi dau vao/dau ra cua mot module duoc mo ta trong
+docs/SRS.md (muc 6) va docs/ARCHITECTURE.md. Viec dinh nghia tuong minh
+cac schema nay ngay tu Tuan 1 giup cac module (O1-O5) co the duoc phat
+trien va kiem thu doc lap trong cac tuan tiep theo, dung tinh than
+"flexible / modular" ma LIDA (Dibia, 2023) de xuat.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 # O1 - Data Profiler
 # ---------------------------------------------------------------------------
 class ColumnProfile(BaseModel):
-    """Thông tin hồ sơ của một cột dữ liệu."""
+    """Thong tin ho so cua mot cot du lieu."""
 
     name: str
     dtype: str
@@ -26,25 +26,24 @@ class ColumnProfile(BaseModel):
     samples: list[str] = Field(default_factory=list)
     min: Optional[str] = None
     max: Optional[str] = None
-    # --- Stage 2 (tùy chọn, làm giàu bằng LLM) ---
+    # --- Stage 2 (tuy chon, lam giau bang LLM) ---
     description: Optional[str] = None
     semantic_type: Optional[str] = None
 
 
 class DataProfile(BaseModel):
-    """Đầu ra của module Data Profiler (O1).
+    """Dau ra cua module Data Profiler (O1).
 
-    Stage 1 (các trường phía trên `dataset_description`) hoàn toàn dựa
-    trên luật (pandas), không gọi LLM. Trong đó `time_min`/`time_max`
-    là khoảng thời gian thực tế của `time_column` (nếu có) — cần thiết
-    để module O2 (Question Interpreter) giải nghĩa các biểu thức thời
-    gian tương đối (vd: "12 tháng gần nhất") mà KHÔNG phải đọc lại
-    DataFrame thô, giữ đúng ranh giới module (NFR-05).
+    Stage 1 (cac truong phia tren dataset_description) hoan toan dua
+    tren luat (pandas), khong goi LLM. Trong do time_min/time_max la
+    khoang thoi gian thuc te cua time_column (neu co) — can thiet de
+    module O2 (Question Interpreter) giai nghia cac bieu thuc thoi gian
+    tuong doi (vd: "12 thang gan nhat") ma KHONG phai doc lai DataFrame
+    tho, giu dung ranh gioi module (NFR-05).
 
-    Stage 2 (`dataset_description`, và `description`/`semantic_type`
-    trong từng ColumnProfile) là TÙY CHỌN, được điền bởi hàm
-    `enrich()` — tương ứng 2 giai đoạn của SUMMARIZER trong LIDA
-    (Dibia, 2023).
+    Stage 2 (dataset_description, va description/semantic_type trong
+    tung ColumnProfile) la TUY CHON, duoc dien boi ham enrich() —
+    tuong ung 2 giai doan cua SUMMARIZER trong LIDA (Dibia, 2023).
     """
 
     row_count: int
@@ -54,43 +53,42 @@ class DataProfile(BaseModel):
     time_max: Optional[str] = None
     group_columns: list[str] = Field(default_factory=list)
     numeric_columns: list[str] = Field(default_factory=list)
-    # --- Stage 2 (tùy chọn, làm giàu bằng LLM) ---
+    # --- Stage 2 (tuy chon, lam giau bang LLM) ---
     dataset_description: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
 # O2 - Question Interpreter
 # ---------------------------------------------------------------------------
-# Tuần 1-2: type/find từng là str tự do (cố tình chưa chốt Literal, xem
-# README "Cố tình CHƯA sửa"). Tuần 3 cài đặt O2 thật -> chốt lại đúng 3
-# loại phân tích nêu trong kế hoạch 8 tuần (SRS mục 3, ghi chú Tuần 3):
-# xu hướng (trend), so sánh (comparison), tăng/giảm (growth_rate).
+# Tuan 1-2: type/find tung la str tu do (co tinh chua chot Literal, xem
+# README "Co tinh CHUA sua"). Tuan 3 cai dat O2 that -> chot lai dung 3
+# loai phan tich neu trong ke hoach 8 tuan (SRS muc 3, ghi chu Tuan 3):
+# xu huong (trend), so sanh (comparison), tang/giam (growth_rate).
 TaskType = Literal["trend", "comparison", "growth_rate"]
 FindMode = Literal["min", "max"]
-# 4 pham vi thoi gian "chuan hoa" ma LLM duoc phep chon - CHỈ chọn nhãn,
-# KHÔNG tự tính ngày tháng cụ thể. Việc tính time_start/time_end thật
+# 4 pham vi thoi gian "chuan hoa" ma LLM duoc phep chon - CHI chon nhan,
+# KHONG tu tinh ngay thang cu the. Viec tinh time_start/time_end that
 # (dua tren DataProfile.time_max) la logic Python tat dinh trong
 # question_interpreter._resolve_time_range(), khong giao cho LLM - dung
-# nguyen tac da ap dung cho O3 (tach LLM suy luan khoi tinh toan chinh
-# xac).
+# nguyen tac da ap dung cho O3 (tach LLM suy luan khoi tinh toan chinh xac).
 TimeScope = Literal["all", "last_3_months", "last_6_months", "last_12_months", "custom"]
 
 
 class AnalysisTask(BaseModel):
-    """Một tác vụ phân tích con được suy ra từ câu hỏi người dùng."""
+    """Mot tac vu phan tich con duoc suy ra tu cau hoi nguoi dung."""
 
     type: TaskType
-    metric: str  # tên cột số cần tính, ví dụ "Doanh_thu_trieu_vnd"
-    group_by: Optional[str] = None  # tên cột nhóm, ví dụ "Chi_nhanh"
-    find: Optional[FindMode] = None  # dùng cho growth_rate (chi nhánh min/max)
+    metric: str  # ten cot so can tinh, vi du "Doanh_thu_trieu_vnd"
+    group_by: Optional[str] = None  # ten cot nhom, vi du "Chi_nhanh"
+    find: Optional[FindMode] = None  # dung cho growth_rate (chi nhanh min/max)
 
 
 class AnalysisGoal(BaseModel):
-    """Đầu ra của module Question Interpreter (O2).
+    """Dau ra cua module Question Interpreter (O2).
 
-    `time_scope` là nhãn LLM chọn; `time_start`/`time_end` là ngày cụ
-    thể do Python tính ra (không phải LLM) dựa trên `time_scope` và
-    `DataProfile.time_max` — xem question_interpreter._resolve_time_range.
+    time_scope la nhan LLM chon; time_start/time_end la ngay cu the
+    do Python tinh ra (khong phai LLM) dua tren time_scope va
+    DataProfile.time_max — xem question_interpreter._resolve_time_range.
     """
 
     question: str
@@ -104,48 +102,80 @@ class AnalysisGoal(BaseModel):
 # O3 - Code Generator + Sandbox Executor
 # ---------------------------------------------------------------------------
 class CodeGenResult(BaseModel):
-    """Đầu ra của bước sinh mã (LLM, fill-in-the-middle)."""
+    """Dau ra cua buoc sinh ma (LLM, fill-in-the-middle)."""
 
     code: str
     expected_outputs: list[str] = Field(default_factory=list)
 
 
 class ExecutionResult(BaseModel):
-    """Đầu ra của Sandbox Executor sau khi thực thi mã."""
+    """Dau ra cua Sandbox Executor sau khi thuc thi ma."""
 
     success: bool
     results: dict = Field(default_factory=dict)
     error: Optional[str] = None
     attempts: int = 1
+    code: Optional[str] = None  # Doan ma Python da duoc sinh va thuc thi
 
 
 # ---------------------------------------------------------------------------
 # O4 - Chart Generator
 # ---------------------------------------------------------------------------
-class ChartSpec(BaseModel):
-    """Đặc tả một biểu đồ để frontend render (Plotly/Recharts)."""
 
-    chart_type: str  # "line" | "bar"
+# Tuan 5: Chot Literal (da hen tu review Tuan 1-2 "Co tinh CHUA sua —
+# se chot khi cai dat that O4"). Chi 2 loai bieu do vi pham vi da gioi
+# han co chu dich (trend -> line, comparison/growth_rate -> bar).
+ChartType = Literal["line", "bar"]
+
+
+class ChartSpec(BaseModel):
+    """Dac ta mot bieu do de frontend render (Plotly/Recharts/Chart.js).
+
+    highlight_x: ten category can to mau noi bat, vi du chi nhanh giam
+    manh nhat trong task growth_rate. Frontend Tuan 7 dung field nay de
+    render mau khac; O4 chi can dien dung ten, khong tu to mau.
+    """
+
+    chart_type: ChartType
     title: str
     x: list[str]
     series: dict[str, list[float]]  # {ten_chuoi: [gia_tri...]}
+    highlight_x: Optional[str] = None  # category can to noi bat (neu co)
+
+
+class TaskResult(BaseModel):
+    """Ghep 1 AnalysisTask voi ExecutionResult tuong ung.
+
+    Dung lam input cho O4 (Chart Generator) va O5 (Insight Generator,
+    Tuan 6), vi ca 2 module deu can biet "task nay loai gi" + "ket qua
+    tinh duoc la gi" cung luc.
+
+    Ly do tach rieng thay vi dung chu ky cu (tasks, execution):
+    Orchestrator chay tung AnalysisTask rieng le (run_task()), moi task
+    co ExecutionResult doc lap. AnalysisGoal co the co nhieu task nen
+    viec ghep 1-1 (task, execution) la cach duy nhat dam bao O4 biet
+    ket qua nao thuoc ve task nao.
+    """
+
+    task: AnalysisTask
+    execution: ExecutionResult
 
 
 # ---------------------------------------------------------------------------
 # O5 - Insight Generator
 # ---------------------------------------------------------------------------
 class InsightResult(BaseModel):
-    """Đầu ra của module Insight Generator."""
+    """Dau ra cua module Insight Generator."""
 
     insight_text: str
     confidence_score: Optional[float] = None
 
 
 # ---------------------------------------------------------------------------
-# Kết quả tổng hợp trả về cho client (FR-09)
+# Ket qua tong hop tra ve cho client (FR-09)
 # ---------------------------------------------------------------------------
 class AnalyzeResponse(BaseModel):
     goal: AnalysisGoal
-    execution: ExecutionResult
+    task_results: list[TaskResult] = Field(default_factory=list)  # thay execution don le
     charts: list[ChartSpec] = Field(default_factory=list)
     insight: Optional[InsightResult] = None

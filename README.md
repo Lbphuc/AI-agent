@@ -8,7 +8,7 @@ Kiến trúc pipeline lấy cảm hứng từ LIDA (Dibia, 2023) — xem
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) để biết cách 5 module được
 mở rộng từ ý tưởng SUMMARIZER / GOAL EXPLORER / VISGENERATOR của LIDA.
 
-## Trạng thái (Tuần 3/8)
+## Trạng thái (Tuần 4/8)
 
 - [x] Nghiên cứu tài liệu, xác định yêu cầu (`docs/SRS.md`)
 - [x] Thiết kế kiến trúc tổng thể (`docs/ARCHITECTURE.md`)
@@ -20,9 +20,32 @@ mở rộng từ ý tưởng SUMMARIZER / GOAL EXPLORER / VISGENERATOR của LID
       tùy chọn, có test với client giả lập)
 - [x] Module O2 — Question Interpreter (prompt few-shot, grounding
       check, toán ngày tháng tất định, 10 test với client giả lập)
-- [ ] Module O3 — Code Generator + Sandbox Executor (Tuần 4)
+- [x] Module O3 — Code Generator + Sandbox Executor + Orchestrator (Tuần 4)
 - [ ] Module O4 — Chart Generator (Tuần 5)
 - [ ] Module O5 — Insight Generator (Tuần 6)
+
+### CHANGELOG Tuần 4
+
+- **O3a — Code Generator (`code_generator.py`):**
+  - Triển khai sinh mã theo từng `AnalysisTask` riêng lẻ (không gộp nhiều task vào một prompt).
+  - Sử dụng **3 scaffold chuyên biệt** cho 3 loại bài toán (`trend`, `comparison`, `growth_rate`) — LLM chỉ điền logic tính toán bên trong thân hàm `analyze(df)`, khung hàm và định dạng trả về được cố định.
+  - Mỗi loại bài toán có bộ few-shot prompt riêng biệt, ngắn gọn, giảm ảo giác.
+  - Hỗ trợ cơ chế **Error Feedback** (`previous_error`): khi vòng lặp retry phát hiện lỗi thực thi, thông báo lỗi được truyền ngược vào prompt để LLM sửa đúng trọng tâm.
+- **O3b — Sandbox Executor (`sandbox_executor.py`):**
+  - Thiết kế kiến trúc phòng thủ **3 lớp**:
+    - *Lớp 1 (Tĩnh - AST Check):* Quét cây cú pháp trừu tượng trước khi chạy, chặn triệt để mọi `import`, các hàm nguy hiểm (`eval`, `exec`, `open`, `input`) và mọi truy cập thuộc tính dunder (`__class__`, `__globals__`, `__subclasses__`...).
+    - *Lớp 2 (Hệ điều hành - Process Isolation):* Sử dụng `multiprocessing.get_context("spawn")` chạy code trong tiến trình độc lập hoàn toàn; áp dụng `join(timeout)` và `terminate()` để tiêu diệt ngay vòng lặp vô hạn ở tầng OS. Giải quyết bài toán tương thích Windows/Linux/Mac và tránh deadlock trong môi trường đa luồng của FastAPI/uvicorn.
+    - *Lớp 3 (Môi trường thực thi - Namespace):* Khởi chạy `exec()` với `__builtins__={}`, cô lập chỉ cho phép truy cập `pd` (pandas) và `df` (DataFrame).
+  - Tích hợp điều kiện kiểm tra `resource.setrlimit` trên Linux/Mac (giới hạn 512MB RAM), tự động bỏ qua an toàn trên Windows.
+- **Orchestrator (`analysis_runner.py`):**
+  - Tách bạch vai trò: sandbox `execute()` chỉ chạy đơn lẻ 1 lần; orchestrator `run_task()` quản lý vòng lặp thử lại tối đa 3 lần (`max_attempts=3`).
+  - Tiền xử lý lọc thời gian tất định bằng hàm `_filter_by_time_range()` trong Python trước khi nạp DataFrame vào sandbox — ngăn LLM can thiệp hoặc sai lệch bộ lọc thời gian.
+- **Script đo lường AER (`measure_aer.py`):**
+  - Xây dựng bộ benchmark 15 câu hỏi thuộc 3 dataset mẫu đo tỉ lệ lỗi phân tích (Analysis Error Rate - SRS NFR-04 ≤ 10%).
+- **Tài liệu:**
+  - Bổ sung mục 7 trong `docs/ARCHITECTURE.md` ghi nhận trung thực các giới hạn thực tế của sandbox và giải pháp production phục vụ báo cáo đồ án.
+  - Cập nhật I/O Contract trong `docs/SRS.md`.
+- **Kiểm thử:** Đạt **72/72 tests pass** (bổ sung 38 test mới phủ toàn bộ O3a, O3b, orchestrator, timeout process).
 
 ### CHANGELOG Tuần 3
 
