@@ -6,8 +6,6 @@ stages:
 variables:
   # Tối ưu đường dẫn cache pip
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  # Cấu hình TLS chuẩn cho dịch vụ Docker-in-Docker
-  DOCKER_TLS_CERTDIR: "/certs"
 
 # ------------------------------------------------------------------------------
 # STAGE: TEST
@@ -47,20 +45,26 @@ test-frontend:
 # STAGE: BUILD
 # ------------------------------------------------------------------------------
 
-# Đóng gói và đẩy Docker Image lên GitLab Container Registry
+# Đóng gói và đẩy Docker Image bằng Kaniko
+# Giải quyết triệt để 2 vấn đề:
+# 1. Không cần đặc quyền root/privileged trên runner (tránh lỗi permission denied dind)
+# 2. Hỗ trợ đẩy lên Registry chạy HTTP thường (--insecure --skip-tls-verify)
 build-image:
   stage: build
-  image: docker:24-cli
-  services:
-    - docker:24-dind
-  before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
   script:
-    # Build image theo Dockerfile multi-stage
-    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA -t $CI_REGISTRY_IMAGE:latest .
-    # Push cả tag commit SHA (truy vết lịch sử) và tag latest
-    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
-    - docker push $CI_REGISTRY_IMAGE:latest
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"${CI_REGISTRY}\":{\"auth\":\"$(printf "%s:%s" "${CI_REGISTRY_USER}" "${CI_JOB_TOKEN}" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+    - >-
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}"
+      --destination "${CI_REGISTRY_IMAGE}:latest"
+      --insecure
+      --skip-tls-verify
   rules:
     # Tự động build khi push vào nhánh chính (main/master)
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
