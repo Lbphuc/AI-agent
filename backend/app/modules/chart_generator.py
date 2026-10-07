@@ -5,13 +5,13 @@ frontend render bang Plotly/Recharts/Chart.js.
 
 KHONG goi LLM — tai buoc nay, loai phan tich (trend/comparison/...) da
 duoc O2 xac dinh ro va so lieu da duoc O3 tinh san, nen chi can mot anh
-xa tat dinh (deterministic mapping): "trend" -> line chart,
-"comparison" -> bar chart... Khac voi VISGENERATOR cua LIDA (von dung
-LLM de ho tro NHIEU ngu phap truc quan hoa bat ky), o day pham vi bieu
-do duoc gioi han co chu dich (2 loai: line, bar) nen rule-based nhanh
-hon, re hon va khong co rui ro LLM chon sai loai bieu do.
+xa tat dinh (deterministic mapping).
 
-Tuan 5: thay stub bang cai dat that.
+Tuan 5: thay stub bang cai dat that (2 loai bieu do: line, bar).
+Tuan 8 (Tier 1): Mo rong len 5 loai bieu do + co che chart_hint.
+  - chart_hint tu O2 la goi y NGU NGHIA (LLM biet truoc khi co du lieu that).
+  - Cac luat tat dinh trong _pick_chart_type la quyet dinh DUA TREN DU LIEU THAT
+    (chi biet sau khi O3 chay xong) — triet ly nhat quan voi time_scope o O2.
 """
 from __future__ import annotations
 
@@ -22,18 +22,67 @@ from ..schemas import AnalysisTask, ChartSpec, ChartType, ExecutionResult, TaskR
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Anh xa loai task -> loai bieu do
+# Bang mac dinh va nguong an toan
 # ---------------------------------------------------------------------------
-_TASK_TYPE_TO_CHART: dict[str, ChartType] = {
+_DEFAULT_CHART: dict[str, ChartType] = {
     "trend": "line",
     "comparison": "bar",
     "growth_rate": "bar",
 }
 
+_MAX_PIE_SLICES = 6       # vuot nguong nay, pie kho doc -> fallback bar
+_MIN_POINTS_FOR_LINE = 5  # duoi nguong nay, line/area trong yeu -> doi sang bar
+_LONG_LABEL_THRESHOLD = 12  # ky tu -> vuot nguong, bar doc thay bar dung
+
 
 # ---------------------------------------------------------------------------
 # Tieu de bieu do — template tat dinh, KHONG can LLM
 # ---------------------------------------------------------------------------
+
+
+def _pick_chart_type(task: AnalysisTask, x: list[str]) -> ChartType:
+    """Ket hop goi y ngu nghia tu LLM (chart_hint) voi cac luat tat dinh.
+
+    Thu tu uu tien:
+    1. chart_hint tu O2 (LLM dua ra truoc khi co du lieu) la diem bat dau.
+    2. Luat an toan tuyet doi (growth_rate + pie -> bo qua pie).
+    3. Luat an toan pie qua nhieu lat -> fallback bar.
+    4. Luat dem diem thoi gian: qua it diem, line/area trong yeu -> bar.
+    5. Luat do do dai nhan: nhan dai -> bar_horizontal.
+
+    Args:
+        task: AnalysisTask co the co chart_hint.
+        x: danh sach nhan truc X da biet (tu O3 chay xong).
+
+    Returns:
+        ChartType da duoc quyet dinh cuoi cung.
+    """
+    chart_type: ChartType = task.chart_hint or _DEFAULT_CHART[task.type]  # type: ignore[assignment]
+
+    # Luat an toan 1 (tuyet doi): growth_rate co the am — pie vo nghia
+    if task.type == "growth_rate" and chart_type == "pie":
+        logger.warning("Bo qua goi y 'pie' cho growth_rate (co the co gia tri am)")
+        chart_type = "bar"
+
+    # Luat an toan 2: pie qua nhieu lat se kho doc
+    if chart_type == "pie" and len(x) > _MAX_PIE_SLICES:
+        logger.info(
+            "Bo qua goi y 'pie' (%d muc > %d gioi han), dung bar",
+            len(x), _MAX_PIE_SLICES,
+        )
+        chart_type = "bar"
+
+    # Luat tat dinh 3: qua it diem thoi gian, line/area trong yeu
+    if task.type == "trend" and chart_type in ("line", "area") and len(x) < _MIN_POINTS_FOR_LINE:
+        chart_type = "bar"
+
+    # Luat tat dinh 4: nhan danh muc dai -> bar ngang de de doc
+    if chart_type == "bar" and any(len(label) > _LONG_LABEL_THRESHOLD for label in x):
+        chart_type = "bar_horizontal"
+
+    return chart_type
+
+
 def _build_title(task: AnalysisTask) -> str:
     """Sinh tieu de bieu do tu task.type va task.metric/group_by.
 
@@ -65,8 +114,6 @@ def _build_chart(task: AnalysisTask, execution: ExecutionResult) -> ChartSpec | 
     Returns:
         ChartSpec neu du lieu hop le, None neu thieu key hoac rong.
     """
-    chart_type = _TASK_TYPE_TO_CHART[task.type]
-
     # Key trong execution.results phai trung voi task.type (dung theo
     # expected_outputs cua O3a: "trend", "comparison", "growth_rate")
     data_key = task.type
@@ -79,6 +126,9 @@ def _build_chart(task: AnalysisTask, execution: ExecutionResult) -> ChartSpec | 
         )
         return None
 
+    x = list(data.keys())
+    chart_type = _pick_chart_type(task, x)  # Thay cho tra bang tat dinh cu
+
     # highlight_x: ten category can to noi bat (chi co o growth_rate)
     # Lay tu execution.results["target"] — da duoc O3a san xuat theo scaffold
     highlight_x: str | None = None
@@ -90,7 +140,7 @@ def _build_chart(task: AnalysisTask, execution: ExecutionResult) -> ChartSpec | 
     return ChartSpec(
         chart_type=chart_type,
         title=_build_title(task),
-        x=list(data.keys()),
+        x=x,
         series={task.metric: [float(v) for v in data.values()]},
         highlight_x=highlight_x,
     )

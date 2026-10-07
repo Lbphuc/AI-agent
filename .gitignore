@@ -7,9 +7,19 @@ __pycache__/
 *.so
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 *.egg-info/
 build/
 dist/
+*.egg
+
+# =============================================================================
+# Test & Coverage artifacts
+# =============================================================================
+.coverage
+.coverage.*
+htmlcov/
+coverage/
 
 # =============================================================================
 # Virtual Environments
@@ -18,15 +28,36 @@ dist/
 venv/
 env/
 ENV/
+env.bak/
+venv.bak/
 
 # =============================================================================
 # Secrets & Environment Variables (TUYỆT ĐỐI KHÔNG PUSH)
 # =============================================================================
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.pem
 *.key
+*.cert
+*.crt
+
+# =============================================================================
+# Node / Frontend (React + Vite)
+# =============================================================================
+**/node_modules/
+**/dist/
+frontend/dist/
+frontend/.vite/
+frontend/.env.local
+frontend/.env.*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+.eslintcache
+.oxlint_cache/
 
 # =============================================================================
 # Temporary / Scratch Test Files & Outputs
@@ -35,11 +66,25 @@ profile_output.json
 test_models.py
 *.log
 scratch/
+tmp/
+temp/
+*.tmp
+*.bak
+
+# =============================================================================
+# Jupyter / Notebooks
+# =============================================================================
+.ipynb_checkpoints/
 
 # =============================================================================
 # OS specific
 # =============================================================================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 desktop.ini
 
@@ -48,13 +93,8 @@ desktop.ini
 # =============================================================================
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
 *.sublime-project
 *.sublime-workspace
-
-# =============================================================================
-# Node / Frontend (Dành cho Tuần 7 React)
-# =============================================================================
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*

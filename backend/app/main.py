@@ -16,6 +16,7 @@ import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 import logging
@@ -41,6 +42,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Phuc vu static assets cua React frontend khi da build (trong Docker hoac npm run build)
+_dist_assets = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist" / "assets"
+if _dist_assets.exists():
+    app.mount("/assets", StaticFiles(directory=_dist_assets), name="assets")
 
 # Danh sach encoding thu theo thu tu uu tien cao→thap (FR-12).
 # utf-8-sig: UTF-8 kem BOM (Excel Windows thuong xuat dinh dang nay).
@@ -149,7 +155,10 @@ async def _read_uploaded_file(file: UploadFile) -> pd.DataFrame:
 
 @app.get("/", include_in_schema=False, response_model=None)
 def root() -> Response:
-    """Tra ve giao dien Web Demo truc quan O1 -> O5 (hoac chuyen huong sang /docs)."""
+    """Tra ve React frontend neu da build (dist), hoac Web Demo preview_charts.html."""
+    dist_index = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist" / "index.html"
+    if dist_index.exists():
+        return FileResponse(dist_index, media_type="text/html")
     html_path = Path(__file__).resolve().parent.parent.parent / "tools" / "preview_charts.html"
     if html_path.exists():
         return FileResponse(html_path, media_type="text/html")
@@ -202,6 +211,7 @@ def debug_llm() -> dict:
 
 
 @app.post("/profile", response_model=DataProfile)
+@app.post("/api/profile", response_model=DataProfile, include_in_schema=False)
 async def profile_csv(file: UploadFile = File(...)) -> DataProfile:
     """Chay Data Profiler (O1 — Stage 1 + Stage 0 lam sach) tren file tai len.
 
@@ -237,6 +247,7 @@ async def profile_many(files: list[UploadFile] = File(...)) -> dict[str, DataPro
 
 
 @app.post("/interpret", response_model=AnalysisGoal)
+@app.post("/api/interpret", response_model=AnalysisGoal, include_in_schema=False)
 async def interpret_question(
     file: UploadFile = File(...), question: str = Form(...)
 ) -> AnalysisGoal:
@@ -311,6 +322,7 @@ async def chart_preview(
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
+@app.post("/api/analyze", response_model=AnalyzeResponse, include_in_schema=False)
 async def analyze(
     file: UploadFile = File(...), question: str = Form(...)
 ) -> AnalyzeResponse:

@@ -1,0 +1,30 @@
+# Version control
+.git
+.gitignore
+.github
+.gitlab-ci.yml
+
+# Python caches, virtual environments & logs
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+*.log
+
+# Sensitive environment variables & secrets (KHÔNG bake API keys vào image)
+.env
+.env.*
+!.env.example
+
+# Node / Frontend local host artifacts (để container tự build sạch)
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# IDE & OS temp files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

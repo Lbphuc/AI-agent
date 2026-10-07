@@ -34,6 +34,7 @@
             font-weight: 700;
             background: linear-gradient(90deg, var(--accent), var(--accent2));
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
         header p { color: var(--muted); font-size: 0.9rem; margin-top: 6px; }
@@ -282,7 +283,14 @@
             const card = document.createElement('div');
             card.className = 'chart-card';
 
-            const typeLabel = spec.chart_type === 'line' ? 'Line chart' : 'Bar chart';
+            const typeLabels = {
+                line: 'Line chart',
+                area: 'Area chart',
+                bar: 'Bar chart',
+                bar_horizontal: 'Bar chart (ngang)',
+                pie: 'Pie chart',
+            };
+            const typeLabel = typeLabels[spec.chart_type] || 'Bar chart';
             const seriesKeys = Object.keys(spec.series);
 
             let highlightHtml = '';
@@ -305,11 +313,38 @@
 
             const ctx = document.getElementById(`chart-${idx}`).getContext('2d');
 
+            const isHorizontal = spec.chart_type === 'bar_horizontal';
+            const isArea = spec.chart_type === 'area';
+            const isPie = spec.chart_type === 'pie';
+            const isBar = spec.chart_type === 'bar' || isHorizontal;
+
+            // Chart.js chi chap nhan: 'bar', 'line', 'pie', 'doughnut', etc.
+            // 'bar_horizontal' trong Chart.js la 'bar' voi indexAxis: 'y'
+            // 'area' trong Chart.js la 'line' voi fill: true / 'origin'
+            let chartJsType = 'bar';
+            if (spec.chart_type === 'line' || isArea) {
+                chartJsType = 'line';
+            } else if (isPie) {
+                chartJsType = 'pie';
+            } else if (isBar) {
+                chartJsType = 'bar';
+            }
+
             const datasets = seriesKeys.map((key, si) => {
                 const colors = buildChartColors(spec.x, spec.highlight_x);
                 const base = PALETTE[si % PALETTE.length];
 
-                if (spec.chart_type === 'bar') {
+                if (isPie) {
+                    return {
+                        label: key,
+                        data: spec.series[key],
+                        backgroundColor: spec.x.map((label, i) =>
+                            (spec.highlight_x && label === spec.highlight_x) ? HIGHLIGHT_COLOR : PALETTE[i % PALETTE.length]
+                        ),
+                        borderColor: '#1a1d27',
+                        borderWidth: 2,
+                    };
+                } else if (isBar) {
                     return {
                         label: key,
                         data: spec.series[key],
@@ -319,35 +354,44 @@
                         borderRadius: 5,
                     };
                 } else {
-                    // line
+                    // line hoac area
                     return {
                         label: key,
                         data: spec.series[key],
                         borderColor: base,
-                        backgroundColor: base + '25',
+                        backgroundColor: isArea ? base + '40' : base + '25',
                         tension: 0.35,
-                        fill: true,
+                        fill: isArea ? 'origin' : false,
                         pointRadius: 3,
                         pointHoverRadius: 5,
                     };
                 }
             });
 
-            const instance = new Chart(ctx, {
-                type: spec.chart_type,
-                data: { labels: spec.x, datasets },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { labels: { color: '#e2e8f0', font: { size: 12 } } },
-                        tooltip: { backgroundColor: '#1a1d27', borderColor: '#2d3148', borderWidth: 1 },
-                    },
-                    scales: {
-                        x: { ticks: { color: '#718096', maxRotation: 45 }, grid: { color: '#2d3148' } },
-                        y: { ticks: { color: '#718096' }, grid: { color: '#2d3148' } },
-                    },
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#e2e8f0', font: { size: 12 } } },
+                    tooltip: { backgroundColor: '#1a1d27', borderColor: '#2d3148', borderWidth: 1 },
                 },
+            };
+
+            if (isHorizontal) {
+                chartOptions.indexAxis = 'y';
+            }
+
+            if (!isPie) {
+                chartOptions.scales = {
+                    x: { ticks: { color: '#718096', maxRotation: isHorizontal ? 0 : 45 }, grid: { color: '#2d3148' } },
+                    y: { ticks: { color: '#718096' }, grid: { color: '#2d3148' } },
+                };
+            }
+
+            const instance = new Chart(ctx, {
+                type: chartJsType,
+                data: { labels: spec.x, datasets },
+                options: chartOptions,
             });
             _chartInstances.push(instance);
         }

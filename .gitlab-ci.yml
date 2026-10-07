@@ -1,0 +1,85 @@
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  # Tối ưu đường dẫn cache pip
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  # Cấu hình TLS chuẩn cho dịch vụ Docker-in-Docker
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# ------------------------------------------------------------------------------
+# STAGE: TEST
+# ------------------------------------------------------------------------------
+
+# Kiểm thử Backend Python (134 test cases)
+test-backend:
+  stage: test
+  image: python:3.11-slim
+  variables:
+    PYTHONPATH: "."
+  before_script:
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+  script:
+    - pytest -v
+  cache:
+    key: "python-deps-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .cache/pip
+
+# Kiểm tra biên dịch TypeScript cho Frontend React
+test-frontend:
+  stage: test
+  image: node:20-slim
+  before_script:
+    - cd frontend
+    - npm install --legacy-peer-deps
+  script:
+    - npm run build
+  cache:
+    key: "frontend-deps-$CI_COMMIT_REF_SLUG"
+    paths:
+      - frontend/node_modules/
+
+# ------------------------------------------------------------------------------
+# STAGE: BUILD
+# ------------------------------------------------------------------------------
+
+# Đóng gói và đẩy Docker Image lên GitLab Container Registry
+build-image:
+  stage: build
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
+  script:
+    # Build image theo Dockerfile multi-stage
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA -t $CI_REGISTRY_IMAGE:latest .
+    # Push cả tag commit SHA (truy vết lịch sử) và tag latest
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $CI_REGISTRY_IMAGE:latest
+  rules:
+    # Tự động build khi push vào nhánh chính (main/master)
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+    # Cho phép kích hoạt thủ công trên các nhánh phát triển khác
+    - if: $CI_COMMIT_BRANCH
+      when: manual
+      allow_failure: true
+
+# ------------------------------------------------------------------------------
+# STAGE: DEPLOY
+# ------------------------------------------------------------------------------
+
+# Job triển khai mẫu (kích hoạt thủ công khi sẵn sàng đưa lên server)
+deploy-production:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Triển khai phiên bản $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA..."
+    - echo "Chạy container với lệnh: docker run -d -p 8000:8000 --env-file .env $CI_REGISTRY_IMAGE:latest"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+      when: manual

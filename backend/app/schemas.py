@@ -72,6 +72,13 @@ FindMode = Literal["min", "max"]
 # question_interpreter._resolve_time_range(), khong giao cho LLM - dung
 # nguyen tac da ap dung cho O3 (tach LLM suy luan khoi tinh toan chinh xac).
 TimeScope = Literal["all", "last_3_months", "last_6_months", "last_12_months", "custom"]
+# Goi y bieu do LLM (O2) co the dua ra TRUOC khi co du lieu that.
+# Chi 2 gia tri mang tinh NGU NGHIA THUAT SU (language signal):
+#   - "pie": cau hoi ngu y TY TRONG/CO CAU ("chiem bao nhieu phan tram")
+#   - "area": cau hoi nhan manh KHOI LUONG TICH LUY theo thoi gian
+# Moi quyet dinh khac (bar_horizontal, bar thay line khi it diem) deu
+# la luat TAT DINH o O4 — chi biet SAU KHI O3 chay va co du lieu that.
+ChartHint = Literal["area", "pie"]
 
 
 class AnalysisTask(BaseModel):
@@ -81,6 +88,7 @@ class AnalysisTask(BaseModel):
     metric: str  # ten cot so can tinh, vi du "Doanh_thu_trieu_vnd"
     group_by: Optional[str] = None  # ten cot nhom, vi du "Chi_nhanh"
     find: Optional[FindMode] = None  # dung cho growth_rate (chi nhanh min/max)
+    chart_hint: Optional[ChartHint] = None  # goi y bieu do ngu nghia tu LLM (O2); chi la GHI CHU tham khao, O4 co the bo qua
 
 
 class AnalysisGoal(BaseModel):
@@ -122,10 +130,10 @@ class ExecutionResult(BaseModel):
 # O4 - Chart Generator
 # ---------------------------------------------------------------------------
 
-# Tuan 5: Chot Literal (da hen tu review Tuan 1-2 "Co tinh CHUA sua —
-# se chot khi cai dat that O4"). Chi 2 loai bieu do vi pham vi da gioi
-# han co chu dich (trend -> line, comparison/growth_rate -> bar).
-ChartType = Literal["line", "bar"]
+# Tuan 5: Chot Literal ban dau chi 2 loai (line, bar).
+# Tuan 8 (Tier 1): Mo rong len 5 loai de ho tro them area, bar_horizontal,
+# pie — xem docs/ARCHITECTURE.md muc "Triet ly tach goi y ngu nghia".
+ChartType = Literal["line", "area", "bar", "bar_horizontal", "pie"]
 
 
 class ChartSpec(BaseModel):

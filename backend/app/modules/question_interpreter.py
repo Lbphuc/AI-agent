@@ -35,7 +35,7 @@ import typing
 import pandas as pd
 
 from ..llm_client import LLMClient
-from ..schemas import AnalysisGoal, AnalysisTask, DataProfile, FindMode, TaskType, TimeScope
+from ..schemas import AnalysisGoal, AnalysisTask, ChartHint, DataProfile, FindMode, TaskType, TimeScope
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 ALLOWED_TASK_TYPES: set[str] = set(typing.get_args(TaskType))
 ALLOWED_FIND: set[str] = set(typing.get_args(FindMode))
 ALLOWED_TIME_SCOPES: set[str] = set(typing.get_args(TimeScope))
+ALLOWED_CHART_HINTS: set[str] = set(typing.get_args(ChartHint))
 
 _MONTHS_BY_SCOPE = {"last_3_months": 3, "last_6_months": 6, "last_12_months": 12}
 
@@ -90,6 +91,18 @@ Ví dụ 5 (khoảng thời gian tùy chỉnh):
 Câu hỏi: "Doanh thu từ tháng 1 đến tháng 6 năm nay thế nào?"
 JSON: {"time_scope": "custom", "custom_start": "2026-01", "custom_end": "2026-06", "tasks": [
   {"type": "trend", "metric": "Doanh_thu_trieu_vnd", "group_by": null, "find": null}
+]}
+
+Ví dụ 6 (gợi ý biểu đồ tỷ trọng — chart_hint="pie"):
+Câu hỏi: "Doanh thu mỗi chi nhánh chiếm bao nhiêu phần trăm tổng doanh thu?"
+JSON: {"time_scope": "last_12_months", "tasks": [
+  {"type": "comparison", "metric": "Doanh_thu_trieu_vnd", "group_by": "Chi_nhanh", "find": null, "chart_hint": "pie"}
+]}
+
+Ví dụ 7 (gợi ý biểu đồ nhấn mạnh khối lượng — chart_hint="area"):
+Câu hỏi: "Tổng doanh thu tích lũy qua từng tháng ra sao?"
+JSON: {"time_scope": "last_12_months", "tasks": [
+  {"type": "trend", "metric": "Doanh_thu_trieu_vnd", "group_by": null, "find": null, "chart_hint": "area"}
 ]}"""
 
 
@@ -124,6 +137,13 @@ Chỉ có 5 giá trị "time_scope" hợp lệ: "all", "last_3_months",
 tính ngày cụ thể. Nếu chọn "custom", thêm 2 trường "custom_start" và
 "custom_end" dạng "YYYY-MM". Nếu câu hỏi không nói rõ khoảng thời
 gian, dùng "last_12_months".
+
+Ngoài ra, mỗi task có thể thêm trường "chart_hint" (tùy chọn, chỉ 2 giá
+trị): "pie" nếu câu hỏi ngụ ý TỶ TRỌNG/CƠ CẤU của một tổng thể (ví dụ
+"chiếm bao nhiêu phần trăm", "cơ cấu"); "area" nếu câu hỏi nhấn mạnh
+KHỐI LƯỢNG/TÍCH LŨY theo thời gian (ví dụ "tổng tích lũy"). Nếu không
+chắc, để null — KHÔNG được gợi ý "pie" cho loại "growth_rate" (giá trị
+có thể âm, pie không thể hiện được).
 
 {FEW_SHOT_EXAMPLES}
 
@@ -202,7 +222,17 @@ def _validate_task(task_dict: dict, profile: DataProfile) -> AnalysisTask:
             f"Giá trị find='{find}' không hợp lệ. Chỉ chấp nhận: {sorted(ALLOWED_FIND)}"
         )
 
-    return AnalysisTask(type=task_type, metric=metric, group_by=group_by, find=find)
+    # chart_hint: chi la goi y tham khao tham my, KHONG bat buoc dung (fail em)
+    # Neu LLM tra gia tri la, bo qua thay vi raise loi lam hong ca cau tra loi
+    chart_hint = task_dict.get("chart_hint")
+    if chart_hint is not None and chart_hint not in ALLOWED_CHART_HINTS:
+        logger.warning(
+            "chart_hint khong hop le: %r -> bo qua (chi chap nhan: %s)",
+            chart_hint, sorted(ALLOWED_CHART_HINTS),
+        )
+        chart_hint = None
+
+    return AnalysisTask(type=task_type, metric=metric, group_by=group_by, find=find, chart_hint=chart_hint)
 
 
 def _parse_and_validate(question: str, raw: dict, profile: DataProfile) -> AnalysisGoal:
