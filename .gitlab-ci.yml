@@ -78,8 +78,8 @@ deploy-production:
   stage: deploy
   image: alpine:latest
   script:
-    - echo "Triển khai phiên bản $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA..."
-    - echo "Chạy container với lệnh: docker run -d -p 8000:8000 --env-file .env $CI_REGISTRY_IMAGE:latest"
+    - 'echo "Trien khai phien ban $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA..."'
+    - 'echo "Chay container: docker run -d -p 8000:8000 --env-file .env $CI_REGISTRY_IMAGE:latest"'
   rules:
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
       when: manual
