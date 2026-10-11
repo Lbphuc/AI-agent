@@ -81,9 +81,26 @@ build-image:
 deploy-production:
   stage: deploy
   image: alpine:latest
+  before_script:
+    # 1. Cài đặt OpenSSH client
+    - apk add --no-cache openssh-client
+    # 2. Khởi động ssh-agent và nạp khóa bí mật
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    # 3. Quét và lưu fingerprint của máy ai-agent vào known_hosts
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
   script:
-    - 'echo "Trien khai phien ban $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA..."'
-    - 'echo "Chay container: docker run -d -p 8000:8000 --env-file .env $CI_REGISTRY_IMAGE:latest"'
+    # 4. Kết nối từ xa để kéo image và cập nhật container
+    - |
+      ssh $DEPLOY_USER@$DEPLOY_HOST "
+        echo '${CI_JOB_TOKEN}' | docker login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} --password-stdin || true
+        docker pull ${CI_REGISTRY_IMAGE}:latest
+        docker stop ai-agent-app || true
+        docker rm ai-agent-app || true
+        docker run -d --name ai-agent-app -p 8000:8000 --restart unless-stopped ${CI_REGISTRY_IMAGE}:latest
+      "
   rules:
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
       when: manual
