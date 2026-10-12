@@ -65,6 +65,8 @@ Chủ doanh nghiệp nhỏ, nhân viên kinh doanh/vận hành không có nền 
 | FR-13 | Hệ thống tự động nhận biết và chuyển đổi số định dạng Việt Nam ("1.500.000") thành giá trị số trước khi phân tích | O1 — Data Profiler (Stage 0) | Cao |
 | FR-14 | Hệ thống cho phép tải lên nhiều file cùng lúc và trả về DataProfile riêng biệt cho từng file (/profile-many) | O1 — Data Profiler / main.py | Trung bình |
 | FR-15 | Hệ thống hỗ trợ Dashboard đa góc nhìn (Perspective Planner) tự động bổ sung biểu đồ phân rã tất định (xu hướng nhóm, tỷ trọng, đóng góp thay đổi, lũy kế...) kèm chú thích tự động | Perspective Planner | Cao |
+| FR-16 | Hệ thống hỗ trợ xuất báo cáo đa định dạng: PDF (bản in vector A4 kèm phụ lục bảng số liệu và phương pháp tính), Excel (.xlsx kèm biểu đồ gốc và cơ chế chống chèn công thức), ảnh PNG độ nét cao cho từng biểu đồ, và CSV hỗ trợ UTF-8 BOM | Backend / Giao diện web | Cao |
+| FR-17 | Giao diện hỗ trợ cấu hình mở rộng tính năng (App Rail và Result Toolbar với các mục 'sắp có' không phá vỡ bố cục), thanh truy vấn thu gọn trong workspace, và hệ thống Design Token thống nhất | Giao diện web | Cao |
 
 ---
 
@@ -115,9 +117,11 @@ Interface chi tiết được định nghĩa bằng Pydantic trong `backend/app/
 | O3a — Code Generator | `task: AnalysisTask`, `DataProfile`, `previous_error: str \| None` | `CodeGenResult` (code, expected_outputs) |
 | O3b — Sandbox Executor | `code: str`, `df: DataFrame`, `timeout: int = 5` | `ExecutionResult` (success, results, error, attempts=1) |
 | Orchestrator (O3 Pipeline) | `task: AnalysisTask`, `profile: DataProfile`, `df: DataFrame`, `max_attempts: int = 3` | `ExecutionResult` (kết quả sau retry loop + error feedback) |
-| O4 — Chart Generator | `list[TaskResult]` | `list[ChartSpec]` (chart_type, title, x, series, highlight_x, role="primary") |
-| Perspective Planner | `goal: AnalysisGoal`, `profile: DataProfile`, `df_filtered: DataFrame`, `task_results: list[TaskResult]` | `list[ChartSpec]` (role="supplementary", perspective, caption, highlight_series) |
+| O4 — Chart Generator | `list[TaskResult]` | `list[ChartSpec]` (chart_type, title, x, series, highlight_x, role="primary", display_name, unit) |
+| Perspective Planner | `goal: AnalysisGoal`, `profile: DataProfile`, `df_filtered: DataFrame`, `task_results: list[TaskResult]` | `list[ChartSpec]` (role="supplementary", perspective, caption, highlight_series, display_name, unit) |
 | O5 — Insight Generator | `question: str`, `list[TaskResult]` | `InsightResult` (insight_text, confidence_score) |
+| Pipeline (/analyze) | `file: UploadFile`, `question: str`, `expand_views: bool = True` | `AnalyzeResponse` (goal, task_results, charts, insight, meta: ReportMeta) |
+| Excel Exporter (/export/xlsx) | `ExportXlsxRequest` (response, sections, org_name) | `StreamingResponse` (.xlsx workbook kèm biểu đồ gốc) |
 
 Sơ đồ luồng dữ liệu đầy đủ: xem `docs/ARCHITECTURE.md`.
 

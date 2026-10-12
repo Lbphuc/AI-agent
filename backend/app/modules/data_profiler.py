@@ -33,6 +33,7 @@ import pandas as pd
 
 from ..llm_client import LLMClient
 from ..schemas import ColumnProfile, DataProfile
+from .business_terms import resolve_column_display
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,7 @@ def profile(df: pd.DataFrame, n_samples: int = 3) -> DataProfile:
     columns: list[ColumnProfile] = []
     for col in df.columns:
         series = df[col]
+        disp_name, unit = resolve_column_display(col)
         columns.append(
             ColumnProfile(
                 name=col,
@@ -226,6 +228,8 @@ def profile(df: pd.DataFrame, n_samples: int = 3) -> DataProfile:
                 samples=[str(v) for v in series.dropna().unique()[:n_samples]],
                 min=str(series.min()) if col in numeric_cols else None,
                 max=str(series.max()) if col in numeric_cols else None,
+                display_name=disp_name,
+                unit=unit,
             )
         )
 

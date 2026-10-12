@@ -83,19 +83,23 @@ def _pick_chart_type(task: AnalysisTask, x: list[str]) -> ChartType:
     return chart_type
 
 
-def _build_title(task: AnalysisTask) -> str:
-    """Sinh tieu de bieu do tu task.type va task.metric/group_by.
+from .business_terms import resolve_column_display
 
-    Tat dinh hoan toan, khong goi LLM — loai phan tich da biet tu O2.
-    """
+
+def _build_title(task: AnalysisTask) -> str:
+    """Sinh tiêu đề biểu đồ từ task.type và tên cột đã Việt hóa (A6)."""
+    metric_disp, _ = resolve_column_display(task.metric)
+    group_disp, _ = resolve_column_display(task.group_by) if task.group_by else ("", None)
+
     if task.type == "trend":
-        return f"Xu huong {task.metric} theo thoi gian"
+        return f"Xu hướng {metric_disp} theo thời gian"
     if task.type == "comparison":
-        return f"So sanh {task.metric} theo {task.group_by}"
+        return f"So sánh {metric_disp} theo {group_disp}"
     if task.type == "growth_rate":
-        verb = "giam" if task.find == "min" else "tang"
-        return f"Chi nhanh {verb} manh nhat — {task.metric} theo {task.group_by}"
-    return task.metric  # phong ho — khong nen xay ra vi type da Literal-validated
+        verb = "giảm" if task.find == "min" else "tăng"
+        prefix = f"{group_disp} " if group_disp else ""
+        return f"{prefix}{verb} mạnh nhất — {metric_disp}"
+    return metric_disp
 
 
 # ---------------------------------------------------------------------------
@@ -106,16 +110,7 @@ def _build_chart(task: AnalysisTask, execution: ExecutionResult) -> ChartSpec | 
 
     Tra None thay vi raise neu thieu du lieu — voi AnalysisGoal nhieu
     task, 1 task loi khong nen lam hong bieu do cua cac task khac.
-
-    Args:
-        task: AnalysisTask xac dinh loai phan tich va ten cot.
-        execution: ExecutionResult da execution.success=True.
-
-    Returns:
-        ChartSpec neu du lieu hop le, None neu thieu key hoac rong.
     """
-    # Key trong execution.results phai trung voi task.type (dung theo
-    # expected_outputs cua O3a: "trend", "comparison", "growth_rate")
     data_key = task.type
     data = execution.results.get(data_key)
 
@@ -127,10 +122,8 @@ def _build_chart(task: AnalysisTask, execution: ExecutionResult) -> ChartSpec | 
         return None
 
     x = [str(k) for k in data.keys()]
-    chart_type = _pick_chart_type(task, x)  # Thay cho tra bang tat dinh cu
+    chart_type = _pick_chart_type(task, x)
 
-    # highlight_x: ten category can to noi bat (chi co o growth_rate)
-    # Lay tu execution.results["target"] — da duoc O3a san xuat theo scaffold
     highlight_x: str | None = None
     if task.type == "growth_rate":
         highlight_x = execution.results.get("target")
@@ -145,12 +138,16 @@ def _build_chart(task: AnalysisTask, execution: ExecutionResult) -> ChartSpec | 
         except (ValueError, TypeError):
             series_vals.append(0.0)
 
+    metric_disp, unit = resolve_column_display(task.metric)
+
     return ChartSpec(
         chart_type=chart_type,
         title=_build_title(task),
         x=x,
         series={task.metric: series_vals},
         highlight_x=highlight_x,
+        display_name=metric_disp,
+        unit=unit,
     )
 
 

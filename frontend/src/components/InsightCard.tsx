@@ -1,96 +1,128 @@
-import type { InsightResult, AnalysisGoal } from "../api/types";
+import { useState } from "react";
+import type { InsightResult, AnalysisGoal, ReportMeta } from "../api/types";
 import "./InsightCard.css";
 
 interface Props {
   insight: InsightResult;
   goal: AnalysisGoal;
+  meta?: ReportMeta | null;
 }
 
-const TIME_SCOPE_LABELS: Record<string, string> = {
-  all: "Toàn bộ dữ liệu",
-  last_3_months: "3 tháng gần nhất",
-  last_6_months: "6 tháng gần nhất",
-  last_12_months: "12 tháng gần nhất",
-  custom: "Khoảng thời gian tùy chỉnh",
-};
+export default function InsightCard({ insight, goal, meta }: Props) {
+  const [copied, setCopied] = useState(false);
+  const [showTechDetails, setShowTechDetails] = useState(false);
 
-export default function InsightCard({ insight, goal }: Props) {
   const confidence = insight.confidence_score;
-  const confidencePct = confidence != null ? Math.round(confidence * 100) : null;
+  const isLowConfidence = confidence != null && confidence < 0.8;
 
-  const confidenceColor =
-    confidence == null ? "muted"
-    : confidence >= 0.8 ? "green"
-    : confidence >= 0.6 ? "orange"
-    : "red";
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(insight.insight_text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Ignored
+    }
+  };
 
-  const confidenceLabel =
-    confidence == null ? "—"
-    : confidence >= 0.8 ? "Cao"
-    : confidence >= 0.6 ? "Trung bình"
-    : "Thấp";
+  const goalSummary = meta?.goal_summary || `Hệ thống đã phân tích dữ liệu theo câu hỏi: “${goal.question}”.`;
 
   return (
-    <div className="insight-card card animate-fade-in-up">
-      {/* Header */}
-      <div className="insight-header">
-        <div className="insight-title-row">
+    <div className="insight-card">
+      <div className="insight-card-header">
+        <div className="insight-title-group">
           <div className="insight-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2a7 7 0 0 1 7 7c0 2.5-1.5 4.5-3 6l-1 3H9l-1-3C6.5 13.5 5 11.5 5 9a7 7 0 0 1 7-7z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
-              <line x1="9" y1="21" x2="15" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <path
+                d="M12 2a7 7 0 0 1 7 7c0 2.5-1.5 4.5-3 6l-1 3H9l-1-3C6.5 13.5 5 11.5 5 9a7 7 0 0 1 7-7z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinejoin="round"
+              />
+              <line x1="9" y1="21" x2="15" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </div>
-          <h2 className="insight-title">Nhận Xét AI</h2>
+          <h2 className="insight-heading">Nhận xét phân tích</h2>
         </div>
 
-        <div className="insight-meta">
-          <span className="badge badge-blue">{TIME_SCOPE_LABELS[goal.time_scope] ?? goal.time_scope}</span>
-          {goal.time_start && goal.time_end && (
-            <span className="insight-period">
-              {goal.time_start} → {goal.time_end}
-            </span>
+        <button className="btn-copy" onClick={handleCopy} title="Sao chép nội dung nhận xét">
+          {copied ? (
+            <>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Đã sao chép
+            </>
+          ) : (
+            <>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              Sao chép
+            </>
           )}
-        </div>
+        </button>
       </div>
 
-      <div className="divider" />
-
-      {/* Nội dung insight */}
-      <p className="insight-text">{insight.insight_text}</p>
-
-      {/* Confidence */}
-      {confidencePct != null && (
-        <div className="confidence-block">
-          <div className="confidence-header">
-            <span className="confidence-label">Độ tin cậy</span>
-            <span className={`confidence-value confidence-${confidenceColor}`}>
-              {confidenceLabel} ({confidencePct}%)
-            </span>
-          </div>
-          <div className="progress-bar">
-            <div
-              className={`progress-fill progress-fill-${confidenceColor}`}
-              style={{ width: `${confidencePct}%` }}
-            />
-          </div>
+      {/* Goal Summary */}
+      {goalSummary && (
+        <div className="insight-goal-summary">
+          <strong>Hệ thống hiểu câu hỏi của bạn là:</strong> {goalSummary}
         </div>
       )}
 
-      {/* Tasks summary */}
-      {goal.tasks.length > 0 && (
-        <div className="insight-tasks">
-          <span className="insight-tasks-label">Nhiệm vụ đã phân tích:</span>
-          <div className="insight-tasks-list">
-            {goal.tasks.map((t, i) => (
-              <span key={i} className={`badge ${t.type === "trend" ? "badge-blue" : t.type === "growth_rate" ? "badge-orange" : "badge-purple"}`}>
-                {t.type === "trend" ? "Xu hướng" : t.type === "growth_rate" ? "Tăng trưởng" : "So sánh"}: {t.metric}
-                {t.group_by ? ` / ${t.group_by}` : ""}
-              </span>
-            ))}
-          </div>
+      {/* Insight Text */}
+      <div className="insight-body">
+        <p className="insight-text">{insight.insight_text}</p>
+      </div>
+
+      {/* Cảnh báo chỉ hiện khi độ tin cậy thấp (< 0.8) */}
+      {isLowConfidence && (
+        <div className="insight-warning-box">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <span>Một số con số trong nhận xét chưa khớp hoàn toàn dữ liệu, hãy đối chiếu với bảng số liệu trước khi dùng.</span>
         </div>
       )}
+
+      {/* Chi tiết kỹ thuật thu gọn */}
+      <div className="tech-details-container">
+        <button
+          className="tech-details-toggle"
+          onClick={() => setShowTechDetails(!showTechDetails)}
+          aria-expanded={showTechDetails}
+        >
+          <span>Chi tiết kỹ thuật</span>
+          <span className="toggle-arrow">{showTechDetails ? "▴" : "▾"}</span>
+        </button>
+
+        {showTechDetails && (
+          <div className="tech-details-content">
+            {confidence != null && (
+              <div className="tech-detail-row">
+                <span className="detail-label">Độ khớp số liệu:</span>
+                <span className="detail-value">{Math.round(confidence * 100)}%</span>
+              </div>
+            )}
+            {meta?.model_name && (
+              <div className="tech-detail-row">
+                <span className="detail-label">Mô hình AI:</span>
+                <span className="detail-value">{meta.model_name}</span>
+              </div>
+            )}
+            {meta && (
+              <div className="tech-detail-row">
+                <span className="detail-label">Số dòng dữ liệu:</span>
+                <span className="detail-value">{meta.rows_used} / {meta.rows_total} dòng</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from "react";
 import type { DragEvent, ChangeEvent } from "react";
+import { formatNumber } from "../utils/formatters";
 import "./FileUpload.css";
 
 interface Props {
@@ -62,8 +63,8 @@ export default function FileUpload({ onFileSelect, selectedFile, disabled }: Pro
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes < 1024 * 1024) return `${formatNumber(bytes / 1024, { decimals: 1 })} KB`;
+    return `${formatNumber(bytes / (1024 * 1024), { decimals: 1 })} MB`;
   };
 
   return (

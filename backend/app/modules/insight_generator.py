@@ -91,8 +91,9 @@ def _build_prompt(question: str, task_results: list[TaskResult]) -> str:
         f"Cau hoi: \"{question}\"\n\n"
         f"So lieu da tinh:\n{data_blocks}\n\n"
         "Viet mot doan nhan xet ngan gon (2-4 cau), bang tieng Viet tu nhien,\n"
-        "tra loi truc tiep cau hoi tren. Neu co nhieu phan so lieu, hay ket\n"
-        "hop chung mot cach mach lac. Chi tra ve doan van, khong them tieu de\n"
+        "tra loi truc tiep cau hoi tren. Giu nguyen chinh xac ten nhom/nhan nhu trong\n"
+        "so lieu, khong them dau hay doi cach viet so voi du lieu goc. Neu co nhieu phan\n"
+        "so lieu, hay ket hop chung mot cach mach lac. Chi tra ve doan van, khong them tieu de\n"
         "hay markdown."
     )
 

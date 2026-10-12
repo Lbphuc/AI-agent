@@ -1,0 +1,253 @@
+/* Kiểu dáng cho trang in báo cáo A4 (ReportDocument) */
+
+.report-document {
+  width: 794px; /* Chuẩn A4 tại 96 DPI: 210mm x 297mm */
+  margin: 0 auto;
+  padding: 24px;
+  background-color: #ffffff;
+  color: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+.report-header {
+  border-bottom: 2px solid #0f172a;
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.report-org {
+  font-size: 14px;
+  font-weight: 700;
+  color: #2563eb;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.report-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 12px 0;
+}
+
+.report-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 16px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.report-section {
+  margin-bottom: 24px;
+}
+
+.report-card {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.report-h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  border-left: 4px solid #2563eb;
+  padding-left: 8px;
+  margin: 0 0 12px 0;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.report-h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.report-h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin: 0 0 8px 0;
+}
+
+.report-field {
+  margin-bottom: 8px;
+}
+
+.report-quote {
+  margin: 4px 0 0 0;
+  padding: 8px 12px;
+  background-color: #f8fafc;
+  border-left: 3px solid #cbd5e1;
+  font-style: italic;
+  color: #1e293b;
+}
+
+.report-summary {
+  margin: 4px 0 0 0;
+  font-weight: 500;
+  color: #0f172a;
+}
+
+.report-insight-box {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  padding: 12px 16px;
+}
+
+.report-insight-text {
+  font-size: 13px;
+  color: #166534;
+  margin: 0 0 8px 0;
+  line-height: 1.6;
+}
+
+.report-disclaimer {
+  font-size: 11px;
+  color: #64748b;
+  margin: 0;
+  font-style: italic;
+}
+
+.report-warning {
+  font-size: 12px;
+  color: #b45309;
+  background-color: #fef3c7;
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.report-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.report-chart-unit {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.report-chart-canvas {
+  display: flex;
+  justify-content: center;
+  margin: 12px 0;
+}
+
+.report-chart-caption {
+  font-size: 12px;
+  color: #475569;
+  background-color: #f8fafc;
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin: 8px 0 0 0;
+}
+
+/* ── BẢNG DỮ LIỆU ── */
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+.report-table thead {
+  display: table-header-group; /* Lặp lại tiêu đề bảng khi ngắt sang trang mới */
+}
+
+.report-table th,
+.report-table td {
+  border: 1px solid #cbd5e1;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.report-table th {
+  background-color: #f1f5f9;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.report-table td {
+  color: #1e293b;
+}
+
+.report-table-more {
+  text-align: center;
+  font-style: italic;
+  color: #64748b;
+  padding: 8px;
+}
+
+.report-footer {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #cbd5e1;
+  padding-top: 12px;
+  margin-top: 24px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* ── CSS DÀNH CHO MEDIA PRINT ── */
+@page {
+  size: A4;
+  margin: 14mm;
+}
+
+@media print {
+  /* Ẩn mọi thứ trên trang ngoại trừ #print-root */
+  body > *:not(#print-root) {
+    display: none !important;
+  }
+
+  #print-root {
+    position: static !important;
+    left: auto !important;
+    width: 100% !important;
+  }
+
+  .report-document {
+    width: 100% !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .report-card {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .report-h2 {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  table thead {
+    display: table-header-group !important;
+  }
+
+  table tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}

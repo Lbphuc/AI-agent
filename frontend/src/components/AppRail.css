@@ -1,0 +1,150 @@
+/* Thanh điều hướng cấp ứng dụng (Rail) */
+
+.app-rail {
+  background-color: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 12px 8px;
+  box-sizing: border-box;
+  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.app-rail.collapsed {
+  width: var(--rail-width-collapsed);
+}
+
+.app-rail.expanded {
+  width: var(--rail-width-expanded);
+}
+
+.rail-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rail-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  text-align: left;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.rail-btn:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+.rail-btn.active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border-color: rgba(91, 140, 255, 0.3);
+}
+
+.rail-btn.soon {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rail-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rail-label {
+  flex-grow: 1;
+}
+
+.soon-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.rail-footer {
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.rail-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  transition: all 0.15s ease;
+}
+
+.rail-toggle-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+/* Responsive: 768px - 1279px Rail chỉ icon */
+@media (max-width: 1279px) {
+  .app-rail.expanded {
+    width: var(--rail-width-collapsed);
+  }
+  .app-rail .rail-label,
+  .app-rail .soon-badge,
+  .app-rail .rail-footer {
+    display: none !important;
+  }
+}
+
+/* Responsive: < 768px Rail thành thanh tab đáy */
+@media (max-width: 767px) {
+  .app-rail {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100% !important;
+    height: 56px;
+    flex-direction: row;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    padding: 4px 12px;
+    z-index: 60;
+  }
+  .rail-items-list {
+    flex-direction: row;
+    justify-content: space-around;
+    width: 100%;
+  }
+  .rail-btn {
+    justify-content: center;
+    padding: 8px;
+  }
+  .rail-footer {
+    display: none !important;
+  }
+}

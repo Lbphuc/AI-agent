@@ -10,27 +10,44 @@ xem kế hoạch chi tiết tại docs/SRS.md (mục 3) và docs/ARCHITECTURE.md
 from __future__ import annotations
 
 import io
+import logging
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import (
+    FileResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
-
-import logging
 
 from .llm_client import GeminiClient
 from .modules import (
     analysis_runner,
     chart_generator,
     data_profiler,
+    excel_exporter,
     insight_generator,
     perspective_planner,
     question_interpreter,
 )
-from .schemas import AnalysisGoal, AnalyzeResponse, ChartSpec, DataProfile, TaskResult
+from .modules.business_terms import resolve_column_display
+from .schemas import (
+    AnalysisGoal,
+    AnalyzeResponse,
+    ChartSpec,
+    DataProfile,
+    ExportXlsxRequest,
+    ReportMeta,
+    TaskResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -437,10 +454,90 @@ async def analyze(
             ),
         )
 
+    rows_total = len(df)
+    rows_used = len(df_filtered) if "df_filtered" in locals() and df_filtered is not None else rows_total
+    report_meta = ReportMeta(
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        model_name=getattr(llm, "model_name", "AI Model"),
+        rows_total=rows_total,
+        rows_used=rows_used,
+        goal_summary=_generate_goal_summary(goal),
+        notes=[],
+    )
+
     return AnalyzeResponse(
         goal=goal,
         task_results=task_results,
         charts=charts,
         insight=insight_result,
+        meta=report_meta,
+    )
+
+
+def _generate_goal_summary(goal: AnalysisGoal) -> str:
+    """Tạo câu tóm tắt mục tiêu ngắn gọn, tự nhiên cho người dùng.
+    Ví dụ: 'So sánh doanh thu giữa các chi nhánh, từ 01/2026 đến 08/2026.'
+    """
+    first_task = goal.tasks[0] if goal.tasks else None
+    metric_raw = first_task.metric if first_task else None
+    group_raw = first_task.group_by if first_task else None
+    metric_disp, _ = resolve_column_display(metric_raw) if metric_raw else ("", "")
+    group_disp, _ = resolve_column_display(group_raw) if group_raw else ("", "")
+
+    parts: list[str] = []
+    task_types = [t.type for t in goal.tasks]
+    if "comparison" in task_types:
+        action = f"So sánh {metric_disp.lower()}"
+        if group_disp:
+            action += f" giữa các {group_disp.lower()}"
+        parts.append(action)
+    elif "trend" in task_types:
+        action = f"Theo dõi xu hướng {metric_disp.lower()} theo thời gian"
+        if group_disp:
+            action += f" của các {group_disp.lower()}"
+        parts.append(action)
+    elif "growth_rate" in task_types:
+        find_mode = "giảm" if (first_task and first_task.find == "min") else "tăng"
+        action = f"Tìm {group_disp.lower() or 'nhóm'} {find_mode} mạnh nhất theo {metric_disp.lower()}"
+        parts.append(action)
+    else:
+        parts.append(f"Phân tích {metric_disp.lower()}")
+
+    target = getattr(goal, "target", None)
+    if target:
+        parts.append(f"tập trung vào {target}")
+
+    if goal.time_start and goal.time_end:
+        parts.append(f"từ {goal.time_start} đến {goal.time_end}")
+    elif goal.time_start:
+        parts.append(f"từ {goal.time_start}")
+    elif goal.time_end:
+        parts.append(f"đến {goal.time_end}")
+
+    return ", ".join(parts) + "."
+
+
+@app.post("/export/xlsx")
+@app.post("/api/export/xlsx", include_in_schema=False)
+async def export_xlsx(request: ExportXlsxRequest) -> Response:
+    """Xuất kết quả phân tích sang file Excel (.xlsx) với biểu đồ gốc.
+    Nhận AnalyzeResponse + options, trả file đính kèm dưới dạng streaming bytes.
+    """
+    try:
+        xlsx_bytes = await run_in_threadpool(excel_exporter.generate_excel_report, request)
+    except Exception as exc:
+        logger.error("Lỗi khi sinh file Excel: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Không thể tạo file Excel: {exc}") from exc
+
+    date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_name = f"BaoCao_PhanTich_{date_str}"
+    quoted_name = quote(f"{base_name}.xlsx")
+
+    return StreamingResponse(
+        io.BytesIO(xlsx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{base_name}.xlsx\"; filename*=UTF-8''{quoted_name}"
+        },
     )
 

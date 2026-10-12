@@ -29,6 +29,9 @@ class ColumnProfile(BaseModel):
     # --- Stage 2 (tuy chon, lam giau bang LLM) ---
     description: Optional[str] = None
     semantic_type: Optional[str] = None
+    # --- Tu dien Viet hoa (Phan A6 de xuat) ---
+    display_name: Optional[str] = None
+    unit: Optional[str] = None
 
 
 class DataProfile(BaseModel):
@@ -165,6 +168,9 @@ class ChartSpec(BaseModel):
     perspective: Perspective = "primary"
     caption: Optional[str] = None          # nhan xet ngan tat dinh
     highlight_series: Optional[str] = None # to dam 1 DUONG trong chart nhieu chuoi
+    # --- Thong tin hien thi tieng Viet (Phan A6 de xuat) ---
+    display_name: Optional[str] = None
+    unit: Optional[str] = None
 
 
 class TaskResult(BaseModel):
@@ -196,6 +202,20 @@ class InsightResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Metadata bao cao (Phan B2 - Xuat bao cao)
+# ---------------------------------------------------------------------------
+class ReportMeta(BaseModel):
+    """Metadata bao cao ho tro kiem chung so lieu va in an / xuat file."""
+
+    generated_at: str            # ISO 8601
+    model_name: str              # Model AI dang dung
+    rows_total: int              # Tong so dong trong file
+    rows_used: int               # So dong thuc su duoc loc va su dung
+    goal_summary: str            # Cau tom tat "He thong hieu cau hoi cua ban la..."
+    notes: list[str] = Field(default_factory=list)  # Cac luu y tinh toan, fallback...
+
+
+# ---------------------------------------------------------------------------
 # Ket qua tong hop tra ve cho client (FR-09)
 # ---------------------------------------------------------------------------
 class AnalyzeResponse(BaseModel):
@@ -203,3 +223,24 @@ class AnalyzeResponse(BaseModel):
     task_results: list[TaskResult] = Field(default_factory=list)  # thay execution don le
     charts: list[ChartSpec] = Field(default_factory=list)
     insight: Optional[InsightResult] = None
+    meta: Optional[ReportMeta] = None
+
+
+# ---------------------------------------------------------------------------
+# Yeu cau xuat Excel (POST /export/xlsx)
+# ---------------------------------------------------------------------------
+class ExportSections(BaseModel):
+    summary: bool = True
+    insight: bool = True
+    primary_chart: bool = True
+    supplementary_charts: bool = True
+    data_tables: bool = True
+    methodology: bool = True
+    calculation_notes: bool = True
+
+
+class ExportXlsxRequest(BaseModel):
+    response: AnalyzeResponse
+    filename: str = "data.csv"
+    org_name: Optional[str] = None
+    sections: ExportSections = Field(default_factory=ExportSections)

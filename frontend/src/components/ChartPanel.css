@@ -1,175 +1,36 @@
-.chart-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
-}
+/* Lưới bố cục kết quả 12 cột (CSS Grid) */
 
-.chart-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.section-header {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.section-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.chart-panel-title {
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.section-desc {
-  font-size: 0.86rem;
-  color: var(--text-muted);
-  margin: 0;
-  line-height: 1.4;
-}
-
-.supplementary-section {
-  padding-top: 16px;
-  border-top: 1px dashed var(--border-subtle);
-}
-
-.chart-grid {
+.charts-grid-12 {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
+  grid-template-columns: repeat(12, 1fr);
   gap: 20px;
+  width: 100%;
 }
 
-.chart-card {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+.chart-grid-col {
+  width: 100%;
 }
 
-.card-supplementary {
-  background: hsla(220, 25%, 11%, 0.65);
-  border-color: hsla(271, 76%, 65%, 0.2);
+.col-span-12 {
+  grid-column: span 12;
 }
 
-.card-supplementary:hover {
-  border-color: hsla(271, 76%, 65%, 0.4);
+.col-span-6 {
+  grid-column: span 6;
 }
 
-.chart-card-header {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.chart-panel-empty {
+  padding: 40px;
+  text-align: center;
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-card);
+  color: var(--text-muted);
 }
 
-.chart-card-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.chart-card-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.4;
-}
-
-.badge-ghost {
-  background: hsla(220, 15%, 50%, 0.15);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-subtle);
-  font-size: 0.72rem;
-  padding: 2px 6px;
-}
-
-.chart-container {
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-/* Tooltip */
-.chart-tooltip {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 12px 16px;
-  box-shadow: var(--shadow-lg);
-  min-width: 160px;
-}
-.chart-tooltip-label {
-  color: var(--text-secondary);
-  font-size: 0.82rem;
-  font-weight: 600;
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.chart-tooltip-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.88rem;
-  padding: 2px 0;
-}
-.chart-tooltip-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.chart-tooltip-name {
-  color: var(--text-secondary);
-  flex: 1;
-}
-.chart-tooltip-value {
-  color: var(--text-primary);
-  font-weight: 700;
-  font-family: var(--font-mono);
-}
-
-/* Highlight note */
-.chart-highlight-note {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.84rem;
-  color: var(--accent-danger);
-  padding: 8px 12px;
-  background: hsla(0, 80%, 62%, 0.06);
-  border: 1px solid hsla(0, 80%, 62%, 0.15);
-  border-radius: var(--radius-md);
-}
-.chart-highlight-note strong { color: var(--accent-danger); font-weight: 700; }
-
-/* Caption */
-.chart-caption {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 14px;
-  background: hsla(217, 91%, 60%, 0.06);
-  border: 1px solid hsla(217, 91%, 60%, 0.18);
-  border-radius: var(--radius-md);
-}
-.chart-caption-icon {
-  color: var(--accent-primary);
-  display: flex;
-  align-items: center;
-  margin-top: 2px;
-  flex-shrink: 0;
-}
-.chart-caption-text {
-  font-size: 0.86rem;
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.45;
+/* Responsive: < 1024px mọi thẻ đều chiếm 12 cột */
+@media (max-width: 1023px) {
+  .chart-grid-col {
+    grid-column: span 12 !important;
+  }
 }

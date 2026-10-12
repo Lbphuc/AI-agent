@@ -1,13 +1,21 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import type { FormEvent } from "react";
 import { analyzeData } from "./api/client";
-import type { AnalyzeResponse } from "./api/types";
+import type { AnalyzeResponse, ExportSections } from "./api/types";
 import FileUpload from "./components/FileUpload";
 import ChartPanel from "./components/ChartPanel";
 import InsightCard from "./components/InsightCard";
+import { AppHeader } from "./components/AppHeader";
+import { AppRail } from "./components/AppRail";
+import { QueryBar } from "./components/QueryBar";
+import { ResultToolbar } from "./components/ResultToolbar";
+import { ExportDialog, type ExportFormat } from "./export/ExportDialog";
+import { ReportDocument } from "./export/ReportDocument";
+import { buildReportModel } from "./export/buildReportModel";
+import { triggerPrintReport } from "./export/printReport";
+import { exportToExcel } from "./export/exportApi";
 import "./App.css";
 
-// ── State machine ────────────────────────────────────────────
 type AppState = "idle" | "loading" | "result" | "error";
 
 const EXAMPLE_QUESTIONS = [
@@ -19,16 +27,32 @@ const EXAMPLE_QUESTIONS = [
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>("idle");
+  const [activeRailId, setActiveRailId] = useState("analyze");
   const [file, setFile] = useState<File | null>(null);
   const [question, setQuestion] = useState("");
   const [expandViews, setExpandViews] = useState(true);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [history, setHistory] = useState<{ question: string; result: AnalyzeResponse }[]>([]);
+
+  // Trạng thái thu gọn/mở rộng biểu mẫu khi đang ở màn hình kết quả
+  const [isFormExpanded, setIsFormExpanded] = useState(false);
+
+  // Hộp thoại xuất báo cáo
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [reportOrgName, setReportOrgName] = useState("");
+  const [exportSections, setExportSections] = useState<ExportSections>({
+    insight: true,
+    primary_chart: true,
+    supplementary_charts: true,
+    data_tables: true,
+    calculation_notes: true,
+  });
+
   const questionRef = useRef<HTMLTextAreaElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
 
   const isLoading = appState === "loading";
+  const hasResult = appState === "result" && result !== null;
   const canSubmit = !!file && question.trim().length > 0 && !isLoading;
 
   const handleSubmit = useCallback(
@@ -38,16 +62,17 @@ export default function App() {
 
       setAppState("loading");
       setErrorMsg(null);
+      setIsFormExpanded(false);
 
       try {
         const data = await analyzeData(file, question.trim(), expandViews);
         setResult(data);
-        setHistory((prev) => [{ question: question.trim(), result: data }, ...prev.slice(0, 4)]);
         setAppState("result");
-        // Cuộn đến kết quả
-        setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+        setTimeout(() => {
+          resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 80);
       } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : "Lỗi không xác định");
+        setErrorMsg(err instanceof Error ? err.message : "Đã xảy ra lỗi không xác định.");
         setAppState("error");
       }
     },
@@ -58,311 +83,312 @@ export default function App() {
     setAppState("idle");
     setResult(null);
     setErrorMsg(null);
-    // Giữ file và question để người dùng có thể hỏi tiếp
+    setIsFormExpanded(false);
+  }, []);
+
+  const handleEditQuery = useCallback(() => {
+    setIsFormExpanded(true);
+    setTimeout(() => {
+      questionRef.current?.focus();
+    }, 100);
   }, []);
 
   const handleNewQuestion = useCallback((q: string) => {
     setQuestion(q);
+    setIsFormExpanded(true);
     questionRef.current?.focus();
   }, []);
 
+  // Đếm số góc nhìn bổ sung
+  const supplementaryCount = useMemo(() => {
+    if (!result?.charts) return 0;
+    return result.charts.filter((c) => c.role === "supplementary").length;
+  }, [result]);
+
+  // Chuỗi khoảng thời gian
+  const timeRangeStr = useMemo(() => {
+    if (!result?.goal) return null;
+    const { time_start, time_end } = result.goal;
+    if (time_start && time_end) return `${time_start} – ${time_end}`;
+    return null;
+  }, [result]);
+
+  // Model dữ liệu báo cáo cho trang in ẩn (#print-root)
+  const reportModel = useMemo(() => {
+    if (!result) return null;
+    return buildReportModel(
+      result,
+      file?.name || "data.csv",
+      exportSections,
+      reportOrgName
+    );
+  }, [result, file, exportSections, reportOrgName]);
+
+  // Xử lý xuất báo cáo theo các định dạng
+  const handleExport = useCallback(
+    async (format: ExportFormat, sections: ExportSections, orgName: string) => {
+      if (!result) return;
+      setExportSections(sections);
+      setReportOrgName(orgName);
+
+      if (format === "pdf") {
+        triggerPrintReport(file?.name || "data.csv");
+      } else if (format === "excel") {
+        await exportToExcel(result, file?.name || "data.csv", sections, orgName);
+      } else if (format === "png") {
+        // Tải ảnh PNG cho biểu đồ chính
+        const primaryCard = document.querySelector(".col-span-12 .chart-card") as HTMLElement;
+        if (primaryCard && result.charts[0]) {
+          const { exportChartToPng } = await import("./export/exportPng");
+          await exportChartToPng(primaryCard, result.charts[0].title);
+        } else {
+          alert("Vui lòng bấm nút '⋯' trên góc từng biểu đồ để tải ảnh PNG riêng biệt.");
+        }
+      }
+    },
+    [result, file]
+  );
+
   return (
-    <div className="app-wrapper">
-      {/* ── HEADER ── */}
-      <header className="app-header glass">
-        <div className="header-inner container">
-          <div className="header-brand">
-            <div className="brand-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                <rect x="3" y="3" width="7" height="7" rx="1" fill="currentColor" opacity="0.8"/>
-                <rect x="14" y="3" width="7" height="7" rx="1" fill="currentColor"/>
-                <rect x="3" y="14" width="7" height="7" rx="1" fill="currentColor"/>
-                <rect x="14" y="14" width="7" height="7" rx="1" fill="currentColor" opacity="0.6"/>
-              </svg>
-            </div>
-            <div>
-              <h1 className="brand-name gradient-text">AI Agent BI</h1>
-              <p className="brand-tagline">Phân tích dữ liệu kinh doanh thông minh</p>
-            </div>
-          </div>
-          <nav className="header-nav">
-            <a href="/api/docs" target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="2"/>
-                <polyline points="14 2 14 8 20 8" stroke="currentColor" strokeWidth="2"/>
-              </svg>
-              API Docs
-            </a>
-          </nav>
-        </div>
-      </header>
+    <div className="app-shell">
+      {/* ── 1. HEADER CỐ ĐỊNH 56px ── */}
+      <AppHeader />
 
-      {/* ── MAIN ── */}
-      <main className="app-main container">
+      <div className="app-main-layout">
+        {/* ── 2. THANH BÊN ĐIỀU HƯỚNG (RAIL) ── */}
+        <AppRail activeId={activeRailId} onSelect={setActiveRailId} />
 
-        {/* ── HERO ── */}
-        <section className="hero-section">
-          <div className="hero-badge badge badge-purple animate-fade-in">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-            </svg>
-            Powered by Gemini AI
-          </div>
-          <h2 className="hero-title animate-fade-in-up">
-            Đặt câu hỏi bằng <span className="gradient-text">ngôn ngữ tự nhiên</span>,<br />
-            nhận biểu đồ và nhận xét tức thì
-          </h2>
-          <p className="hero-subtitle animate-fade-in-up">
-            Tải lên file CSV hoặc Excel, hỏi về xu hướng, so sánh chi nhánh, tốc độ tăng trưởng —<br />
-            AI sẽ phân tích và tạo biểu đồ tự động.
-          </p>
-        </section>
+        {/* ── 3. KHU VỰC NỘI DUNG CHÍNH ── */}
+        <div className="app-content-wrapper">
+          {/* Thanh truy vấn thu gọn (chỉ hiện khi đã có kết quả trong workspace) */}
+          {hasResult && !isFormExpanded && (
+            <QueryBar
+              filename={file?.name || "data.csv"}
+              question={question}
+              onEdit={handleEditQuery}
+              onReset={handleReset}
+            />
+          )}
 
-        {/* ── QUERY CARD ── */}
-        <section className="query-section">
-          <form className="query-card card" onSubmit={handleSubmit} noValidate>
-
-            {/* File upload */}
-            <div className="form-group">
-              <label className="form-label">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="2"/>
-                  <polyline points="14 2 14 8 20 8" stroke="currentColor" strokeWidth="2"/>
-                </svg>
-                Dữ liệu
-              </label>
-              <FileUpload
-                onFileSelect={setFile}
-                selectedFile={file}
-                disabled={isLoading}
-              />
-            </div>
-
-            {/* Question */}
-            <div className="form-group">
-              <label className="form-label" htmlFor="question-input">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-                Câu hỏi phân tích
-              </label>
-              <textarea
-                id="question-input"
-                ref={questionRef}
-                className="input"
-                rows={3}
-                placeholder="Ví dụ: Xu hướng doanh thu theo tháng trong 12 tháng gần nhất?"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                disabled={isLoading}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleSubmit();
-                }}
-              />
-              <div className="question-hint">
-                <kbd>Ctrl</kbd> + <kbd>Enter</kbd> để gửi
-              </div>
-            </div>
-
-            {/* Example questions */}
-            <div className="example-questions">
-              <span className="example-label">Ví dụ:</span>
-              {EXAMPLE_QUESTIONS.map((q) => (
-                <button
-                  key={q}
-                  type="button"
-                  className="example-chip"
-                  onClick={() => handleNewQuestion(q)}
-                  disabled={isLoading}
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-
-            {/* Options */}
-            <div className="form-options">
-              <label className="checkbox-label" title="Tự động phân tích thêm các góc nhìn: xu hướng theo nhóm, tỷ trọng, biến động kỳ...">
-                <input
-                  type="checkbox"
-                  checked={expandViews}
-                  onChange={(e) => setExpandViews(e.target.checked)}
-                  disabled={isLoading}
-                />
-                <span className="checkbox-text">
-                  <strong>Hiển thị thêm góc nhìn</strong> (xu hướng theo chi nhánh, tỷ trọng, đóng góp thay đổi...)
-                </span>
-              </label>
-            </div>
-
-            {/* Submit */}
-            <div className="form-actions">
-              <button
-                id="submit-btn"
-                type="submit"
-                className="btn btn-primary btn-lg"
-                disabled={!canSubmit}
-              >
-                {isLoading ? (
-                  <>
-                    <div className="spinner" />
-                    Đang phân tích…
-                  </>
-                ) : (
-                  <>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+          {/* TRƯỜNG HỢP 1: LANDING STATE (Chưa có kết quả hoặc đang bấm Sửa) */}
+          {(!hasResult || isFormExpanded) && (
+            <main className="landing-content">
+              {!hasResult && (
+                <section className="hero-section">
+                  <div className="hero-badge">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                     </svg>
-                    Phân tích ngay
-                  </>
-                )}
-              </button>
-
-              {(appState === "result" || appState === "error") && (
-                <button type="button" className="btn btn-ghost" onClick={handleReset}>
-                  Hỏi lại
-                </button>
-              )}
-            </div>
-          </form>
-        </section>
-
-        {/* ── LOADING STATE ── */}
-        {isLoading && (
-          <section className="loading-section animate-fade-in">
-            <div className="loading-card card">
-              <div className="loading-steps">
-                {["Đọc & phân tích file dữ liệu (O1)", "Giải nghĩa câu hỏi bằng AI (O2)", "Sinh & chạy code phân tích (O3)", "Tạo biểu đồ (O4)", "Sinh nhận xét (O5)"].map((step, i) => (
-                  <div key={i} className="loading-step" style={{ animationDelay: `${i * 0.4}s` }}>
-                    <div className="loading-step-dot" style={{ animationDelay: `${i * 0.4}s` }} />
-                    <span>{step}</span>
+                    Hệ thống AI Phân tích Dữ liệu Kinh doanh
                   </div>
-                ))}
-              </div>
-              <p className="loading-note">Quá trình phân tích có thể mất 10–30 giây tùy độ phức tạp của dữ liệu.</p>
-            </div>
-          </section>
-        )}
+                  <h2 className="hero-title">
+                    Phân tích dữ liệu bằng ngôn ngữ tự nhiên
+                  </h2>
+                  <p className="hero-subtitle">
+                    Tải lên file dữ liệu doanh thu, chi nhánh hoặc bán hàng — đặt câu hỏi bằng tiếng Việt để xem biểu đồ và nhận xét tức thì.
+                  </p>
+                </section>
+              )}
 
-        {/* ── ERROR STATE ── */}
-        {appState === "error" && errorMsg && (
-          <section className="error-section animate-slide-down">
-            <div className="error-card card">
-              <div className="error-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                  <line x1="15" y1="9" x2="9" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <line x1="9" y1="9" x2="15" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </div>
-              <div>
-                <h3 className="error-title">Không thể phân tích</h3>
-                <p className="error-message">{errorMsg}</p>
-              </div>
-            </div>
-          </section>
-        )}
+              {/* Form truy vấn */}
+              <form className="query-card" onSubmit={handleSubmit} noValidate>
+                <div className="form-group">
+                  <label className="form-label">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                    Tập dữ liệu phân tích
+                  </label>
+                  <FileUpload onFileSelect={setFile} selectedFile={file} disabled={isLoading} />
+                </div>
 
-        {/* ── RESULT STATE ── */}
-        {appState === "result" && result && (
-          <section className="result-section" ref={resultRef}>
-            <div className="result-header">
-              <div className="result-question">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-                <span>"{result.goal.question}"</span>
-              </div>
-              <div className="result-stats">
-                <span className="badge badge-green">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                    <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  </svg>
-                  {result.charts.length} biểu đồ
-                </span>
-                {result.task_results.length > 0 && (
-                  <span className="badge badge-blue">{result.task_results.length} nhiệm vụ</span>
-                )}
-              </div>
-            </div>
-
-            {/* Insight */}
-            {result.insight && (
-              <InsightCard insight={result.insight} goal={result.goal} />
-            )}
-
-            {/* Charts */}
-            <ChartPanel charts={result.charts} />
-
-            {/* Ask another question */}
-            <div className="followup-card card animate-fade-in-up">
-              <div className="followup-header">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <polyline points="9 14 4 9 9 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <path d="M20 20v-7a4 4 0 0 0-4-4H4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-                Hỏi tiếp (file giữ nguyên)
-              </div>
-              <div className="followup-chips">
-                {[
-                  "Tháng nào có doanh thu cao nhất?",
-                  "Chi nhánh nào tăng trưởng tốt nhất?",
-                  "So sánh hiệu suất từng quý?",
-                ].map((q) => (
-                  <button
-                    key={q}
-                    className="example-chip"
-                    onClick={() => {
-                      handleNewQuestion(q);
-                      window.scrollTo({ top: 0, behavior: "smooth" });
+                <div className="form-group">
+                  <label className="form-label" htmlFor="question-input">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                    Câu hỏi của bạn
+                  </label>
+                  <textarea
+                    id="question-input"
+                    ref={questionRef}
+                    className="question-textarea"
+                    rows={3}
+                    placeholder="Ví dụ: So sánh doanh thu giữa các chi nhánh trong năm nay?"
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    disabled={isLoading}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleSubmit();
                     }}
-                  >
-                    {q}
+                  />
+                  <div className="question-hint">Nhấn Ctrl + Enter để gửi câu hỏi</div>
+                </div>
+
+                {/* Câu hỏi gợi ý */}
+                <div className="example-questions">
+                  <span className="example-label">Gợi ý:</span>
+                  {EXAMPLE_QUESTIONS.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      className="example-chip"
+                      onClick={() => handleNewQuestion(q)}
+                      disabled={isLoading}
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="form-options">
+                  <label className="checkbox-label" title="Tự động bổ sung các góc nhìn: xu hướng theo nhóm, tỷ trọng, đóng góp thay đổi...">
+                    <input
+                      type="checkbox"
+                      checked={expandViews}
+                      onChange={(e) => setExpandViews(e.target.checked)}
+                      disabled={isLoading}
+                    />
+                    <span>
+                      <strong>Dashboard đa góc nhìn:</strong> Tự động phân tích thêm xu hướng, tỷ trọng và đóng góp thay đổi
+                    </span>
+                  </label>
+                </div>
+
+                <div className="form-actions">
+                  <button type="submit" className="btn-primary" disabled={!canSubmit}>
+                    {isLoading ? (
+                      <>
+                        <div className="spinner" />
+                        Đang phân tích...
+                      </>
+                    ) : (
+                      <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                        </svg>
+                        Phân tích ngay
+                      </>
+                    )}
                   </button>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
 
-        {/* ── HISTORY (nếu có) ── */}
-        {history.length > 1 && appState === "result" && (
-          <section className="history-section animate-fade-in">
-            <h3 className="history-title">Câu hỏi trước đó</h3>
-            <div className="history-list">
-              {history.slice(1).map((h, i) => (
-                <button
-                  key={i}
-                  className="history-item"
-                  onClick={() => {
-                    setResult(h.result);
-                    setQuestion(h.question);
-                    setAppState("result");
-                    resultRef.current?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                    <polyline points="12 6 12 12 16 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  {hasResult && isFormExpanded && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setIsFormExpanded(false)}
+                    >
+                      Đóng biểu mẫu
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              {/* Trạng thái đang tải */}
+              {isLoading && (
+                <div className="loading-card">
+                  <div className="loading-steps">
+                    {[
+                      "Đọc & thẩm định cấu trúc dữ liệu",
+                      "Hiểu câu hỏi và trích xuất chỉ số",
+                      "Tính toán các số liệu thống kê",
+                      "Tạo các biểu đồ trực quan hóa",
+                      "Tổng hợp nhận xét bằng AI",
+                    ].map((step, i) => (
+                      <div key={i} className="loading-step">
+                        <div className="loading-step-dot" />
+                        <span>{step}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="loading-note">Quá trình phân tích thường mất khoảng 10–15 giây.</p>
+                </div>
+              )}
+
+              {/* Thông báo lỗi */}
+              {appState === "error" && errorMsg && (
+                <div className="error-card">
+                  <div>
+                    <h3 className="error-title">Không thể hoàn tất phân tích</h3>
+                    <p className="error-message">{errorMsg}</p>
+                  </div>
+                </div>
+              )}
+            </main>
+          )}
+
+          {/* TRƯỜNG HỢP 2: WORKSPACE STATE (Kết quả hiển thị ngay màn đầu) */}
+          {hasResult && (
+            <main className="workspace-content" ref={resultRef}>
+              {/* Thanh công cụ kết quả */}
+              <ResultToolbar
+                chartCount={result.charts.length}
+                timeRangeStr={timeRangeStr}
+                onOpenExport={() => setIsExportOpen(true)}
+              />
+
+              {/* Nhận xét AI */}
+              {result.insight && (
+                <InsightCard insight={result.insight} goal={result.goal} meta={result.meta} />
+              )}
+
+              {/* Lưới biểu đồ 12 cột */}
+              <ChartPanel charts={result.charts} />
+
+              {/* Gợi ý hỏi tiếp */}
+              <div className="followup-card">
+                <div className="followup-header">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="9 14 4 9 9 4" />
+                    <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
                   </svg>
-                  {h.question}
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-      </main>
+                  Gợi ý hỏi tiếp trên tập dữ liệu này
+                </div>
+                <div className="followup-chips">
+                  {[
+                    "Chi nhánh nào có doanh thu cao nhất?",
+                    "Chi nhánh nào tăng trưởng mạnh nhất?",
+                    "Diễn biến doanh thu tổng theo tháng?",
+                  ].map((q) => (
+                    <button
+                      key={q}
+                      className="example-chip"
+                      onClick={() => {
+                        handleNewQuestion(q);
+                      }}
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </main>
+          )}
 
-      {/* ── FOOTER ── */}
-      <footer className="app-footer">
-        <div className="container">
-          <p>AI Agent BI – Đồ án tốt nghiệp · Dựa trên kiến trúc LIDA (Dibia, 2023)</p>
+          {/* Footer */}
+          <footer className="app-footer">
+            AI Agent BI — Hệ thống trực quan hóa & Phân tích Dữ liệu Kinh doanh Thông minh
+          </footer>
         </div>
-      </footer>
+      </div>
+
+      {/* ── 4. MODAL XUẤT BÁO CÁO ── */}
+      <ExportDialog
+        isOpen={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        supplementaryCount={supplementaryCount}
+        onExport={handleExport}
+      />
+
+      {/* ── 5. KHỐI IN VECTOR ẨN (#print-root) CHO BÁO CÁO A4 ── */}
+      {reportModel && (
+        <div id="print-root">
+          <ReportDocument model={reportModel} />
+        </div>
+      )}
     </div>
   );
 }

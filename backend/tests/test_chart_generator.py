@@ -203,7 +203,7 @@ class TestChartSpecContent:
             find="min",
         )
         charts = generate_charts([tr])
-        assert "giam" in charts[0].title.lower()
+        assert any(w in charts[0].title.lower() for w in ("giảm", "giam"))
 
     def test_growth_rate_title_contains_tang_for_max(self):
         tr = _make_task_result(
@@ -212,7 +212,7 @@ class TestChartSpecContent:
             find="max",
         )
         charts = generate_charts([tr])
-        assert "tang" in charts[0].title.lower()
+        assert any(w in charts[0].title.lower() for w in ("tăng", "tang"))
 
 
 # ---------------------------------------------------------------------------

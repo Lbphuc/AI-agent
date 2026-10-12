@@ -1,0 +1,111 @@
+/* Design Tokens cho AI Agent BI — Thống nhất màn hình, xuất ảnh và in ấn */
+
+:root {
+  /* ── Nền & Bề mặt (Dark Mode chuẩn) ── */
+  --bg-app: #0B0F17;
+  --bg-surface: #121826;
+  --bg-elevated: #171F30;
+  --bg-card: #141B2D;
+  --border: #243049;
+  --border-subtle: #1E293B;
+
+  /* ── Chữ ── */
+  --text-primary: #E8EDF5;
+  --text-secondary: #A9B4C8;
+  --text-muted: #64748B;
+
+  /* ── Ngữ nghĩa ── */
+  --accent: #5B8CFF;
+  --accent-hover: #4677EC;
+  --accent-subtle: rgba(91, 140, 255, 0.12);
+  --pos: #34D399;
+  --pos-subtle: rgba(52, 211, 153, 0.12);
+  --neg: #F87171;
+  --neg-subtle: rgba(248, 113, 113, 0.12);
+  --warn: #FBBF24;
+  --warn-subtle: rgba(251, 191, 36, 0.12);
+
+  /* ── Bảng màu chuỗi biểu đồ (Okabe–Ito điều chỉnh độ sáng cho nền tối) ── */
+  --chart-1: #56B4E9;
+  --chart-2: #E69F00;
+  --chart-3: #2BC4A0;
+  --chart-4: #CC79A7;
+  --chart-5: #F0E442;
+  --chart-6: #7C9CFF;
+  --chart-7: #E07B54;
+  --chart-8: #B0B8C8;
+
+  /* ── Khoảng cách (Thang 4px) ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ── Bo góc & Viền ── */
+  --radius-sm: 6px;
+  --radius-btn: 8px;
+  --radius-card: 12px;
+  --radius-full: 9999px;
+
+  /* ── Kích thước khung vỏ (Layout) ── */
+  --header-height: 56px;
+  --rail-width-collapsed: 64px;
+  --rail-width-expanded: 232px;
+  --query-bar-height: 48px;
+  --content-max-width: 1280px;
+
+  /* ── Đổ bóng & Hiệu ứng ── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+
+  /* ── Typography ── */
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-base: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 22px;
+}
+
+/* ── Chủ đề in / xuất báo cáo trắng đen tiết kiệm mực ── */
+[data-theme="print"],
+.theme-print {
+  --bg-app: #FFFFFF;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #F8FAFC;
+  --bg-card: #FFFFFF;
+  --border: #CBD5E1;
+  --border-subtle: #E2E8F0;
+
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #64748B;
+
+  --accent: #2563EB;
+  --accent-hover: #1D4ED8;
+  --accent-subtle: #EFF6FF;
+  --pos: #059669;
+  --pos-subtle: #ECFDF5;
+  --neg: #DC2626;
+  --neg-subtle: #FEF2F2;
+  --warn: #D97706;
+
+  /* Màu chuỗi biểu đồ đậm cho nền giấy trắng */
+  --chart-1: #0072B2;
+  --chart-2: #D55E00;
+  --chart-3: #009E73;
+  --chart-4: #CC79A7;
+  --chart-5: #E69F00;
+  --chart-6: #4F46E5;
+  --chart-7: #B45309;
+  --chart-8: #334155;
+
+  --shadow-card: none;
+  --shadow-sm: none;
+}

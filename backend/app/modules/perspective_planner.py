@@ -21,6 +21,7 @@ from typing import Callable
 import pandas as pd
 
 from ..schemas import AnalysisGoal, ChartSpec, DataProfile, TaskResult
+from .business_terms import resolve_column_display
 
 logger = logging.getLogger(__name__)
 
@@ -252,15 +253,20 @@ def perspective_trend_by_group(ctx: PerspectiveContext) -> ChartSpec | None:
 
     highlight_series = ctx.target if ctx.target in series else None
 
+    metric_disp, metric_unit = resolve_column_display(ctx.primary_metric)
+    group_disp, _ = resolve_column_display(ctx.group_col)
+
     return ChartSpec(
         chart_type="line",
-        title=f"Xu hướng {ctx.primary_metric} theo {ctx.group_col}",
+        title=f"Diễn biến {metric_disp} theo {group_disp}",
         x=x,
         series=series,
         role="supplementary",
         perspective="trend_by_group",
         caption=caption,
         highlight_series=highlight_series,
+        display_name=metric_disp,
+        unit=metric_unit,
     )
 
 
@@ -299,7 +305,9 @@ def perspective_share_of_total(ctx: PerspectiveContext) -> ChartSpec | None:
     x = [str(k) for k in sums.index]
     # Series dùng giá trị phần trăm để pie hiển thị chuẩn xác
     pct_series = [round(float(v) / total * 100, 1) for v in sums.values]
-    series = {f"Tỷ trọng {ctx.primary_metric} (%)": pct_series}
+    metric_disp, _ = resolve_column_display(ctx.primary_metric)
+    group_disp, _ = resolve_column_display(ctx.group_col)
+    series = {f"Tỷ trọng {metric_disp} (%)": pct_series}
 
     top_name = x[0]
     top_pct = pct_series[0]
@@ -309,12 +317,14 @@ def perspective_share_of_total(ctx: PerspectiveContext) -> ChartSpec | None:
 
     return ChartSpec(
         chart_type="pie",
-        title=f"Tỷ trọng {ctx.primary_metric} theo {ctx.group_col}",
+        title=f"Tỷ trọng {metric_disp} theo {group_disp}",
         x=x,
         series=series,
         role="supplementary",
         perspective="share_of_total",
         caption=caption,
+        display_name=metric_disp,
+        unit="%",
     )
 
 
@@ -355,14 +365,18 @@ def perspective_period_change(ctx: PerspectiveContext) -> ChartSpec | None:
         f"tăng mạnh nhất: {x_out[max_idx]} ({_fmt_vn(max_val, 2, force_sign=True)}%)."
     )
 
+    metric_disp, _ = resolve_column_display(ctx.primary_metric)
+
     return ChartSpec(
         chart_type="bar",
-        title=f"Biến động {ctx.primary_metric} so với kỳ trước (%)",
+        title=f"Biến động {metric_disp} so với kỳ trước (%)",
         x=x_out,
         series={f"% Thay đổi": pct_changes},
         role="supplementary",
         perspective="period_change",
         caption=caption,
+        display_name=metric_disp,
+        unit="%",
     )
 
 
@@ -411,23 +425,27 @@ def perspective_contribution_to_change(ctx: PerspectiveContext) -> ChartSpec | N
     max_val = vals[-1]
 
     if min_val < 0 and max_val > 0:
-        caption = f"{min_name} kéo giảm {_fmt_vn(abs(min_val))} ; {max_name} bù lại {_fmt_vn(max_val, force_sign=True)}."
+        caption = f"{min_name} kéo giảm {_fmt_vn(abs(min_val))}; {max_name} bù lại {_fmt_vn(max_val, force_sign=True)}."
     elif min_val < 0:
         caption = f"{min_name} kéo giảm mạnh nhất ({_fmt_vn(min_val, force_sign=True)})."
     else:
         caption = f"{max_name} đóng góp tăng nhiều nhất ({_fmt_vn(max_val, force_sign=True)})."
 
     highlight_x = ctx.target if ctx.target in x else None
+    metric_disp, metric_unit = resolve_column_display(ctx.primary_metric)
+    group_disp, _ = resolve_column_display(ctx.group_col)
 
     return ChartSpec(
         chart_type="bar",
-        title=f"Đóng góp vào thay đổi {ctx.primary_metric} theo {ctx.group_col}",
+        title=f"Đóng góp vào thay đổi {metric_disp} theo {group_disp}",
         x=x,
-        series={f"Thay đổi {ctx.primary_metric}": vals},
+        series={f"Thay đổi {metric_disp}": vals},
         highlight_x=highlight_x,
         role="supplementary",
         perspective="contribution_to_change",
         caption=caption,
+        display_name=metric_disp,
+        unit=metric_unit,
     )
 
 
@@ -453,15 +471,18 @@ def perspective_cumulative(ctx: PerspectiveContext) -> ChartSpec | None:
 
     total_str = _fmt_vn(cum_vals[-1], 1)
     caption = f"Tổng lũy kế đến kỳ cuối đạt {total_str}."
+    metric_disp, metric_unit = resolve_column_display(ctx.primary_metric)
 
     return ChartSpec(
         chart_type="area",
-        title=f"Tổng lũy kế {ctx.primary_metric} theo thời gian",
+        title=f"Tổng lũy kế {metric_disp} theo thời gian",
         x=times,
-        series={f"Lũy kế {ctx.primary_metric}": cum_vals},
+        series={f"Lũy kế {metric_disp}": cum_vals},
         role="supplementary",
         perspective="cumulative",
         caption=caption,
+        display_name=metric_disp,
+        unit=metric_unit,
     )
 
 
@@ -479,18 +500,21 @@ def perspective_moving_average(ctx: PerspectiveContext) -> ChartSpec | None:
         ma3_vals.append(round(sum(window) / len(window), 2))
 
     caption = "Đường trung bình trượt 3 kỳ (MA3) giúp làm mượt biến động ngắn hạn để nhận diện xu hướng nền."
+    metric_disp, metric_unit = resolve_column_display(ctx.primary_metric)
 
     return ChartSpec(
         chart_type="line",
-        title=f"Đường xu hướng mượt (MA3) — {ctx.primary_metric}",
+        title=f"Đường xu hướng mượt (MA3) — {metric_disp}",
         x=times,
         series={
-            ctx.primary_metric: orig_vals,
+            metric_disp: orig_vals,
             "Trung bình trượt (MA3)": ma3_vals,
         },
         role="supplementary",
         perspective="moving_average",
         caption=caption,
+        display_name=metric_disp,
+        unit=metric_unit,
     )
 
 

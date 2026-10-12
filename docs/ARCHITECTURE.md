@@ -98,10 +98,22 @@ tiếp trong tiến trình chính của mình.
 - **5 Module xử lý:** xem chi tiết interface tại `docs/SRS.md` (mục 6) và mã nguồn tại `backend/app/modules/`.
 
 ### 3.3. Dịch vụ ngoài
-- **Claude API:** dùng cho 3 module cần suy luận ngôn ngữ tự do — O2 (hiểu câu hỏi), O3a (sinh mã), O5 (sinh nhận xét). Xem bảng phân loại "gọi API vs tự viết" tại `docs/SRS.md` mục 7.
+- **Gemini API (Google GenAI) / Claude API (Anthropic):** dùng cho 3 module cần suy luận ngôn ngữ tự do — O2 (hiểu câu hỏi), O3a (sinh mã), O5 (sinh nhận xét). Nhờ thiết kế trừu tượng hoá qua `LLMClient` (Python `Protocol` trong `backend/app/llm_client.py`), hệ thống có thể chuyển đổi linh hoạt giữa Gemini (`gemini-2.5-flash` / `gemini-1.5-flash`) và Claude (`claude-3-5-sonnet`) mà không làm thay đổi bất kỳ logic nghiệp vụ nào trong O1, O2, O3, O5. Hiện tại Gemini được đặt làm cấu hình mặc định.
 - **Sandbox Runtime:** container cô lập chạy mã pandas do O3a sinh ra, chỉ nhận DataFrame làm input, không có quyền mạng/file hệ thống ngoài.
 
-### 3.4. File Storage tạm
+### 3.4. Dịch vụ Báo cáo & Xuất dữ liệu (Reporting & Export Layer)
+Hệ thống hỗ trợ xuất báo cáo đa định dạng (PDF, Excel, PNG, CSV) theo nguyên tắc: **chất lượng cao nhất với chi phí vận hành tối ưu**:
+- **Xuất Excel (.xlsx) phía Backend (`/export/xlsx`):**
+  - Thực hiện trên FastAPI bằng thư viện `xlsxwriter`.
+  - Sinh bảng tính gồm: Sheet "Tóm tắt" (mục tiêu, nhận xét AI, metadata), các Sheet riêng cho từng biểu đồ chứa bảng số liệu và **biểu đồ Excel gốc (native chart)** có thể chỉnh sửa trực tiếp trong Excel.
+  - An toàn dữ liệu: Áp dụng cơ chế chống chèn mã/công thức nguy hiểm (Formula Injection Protection) bằng cách ép kiểu `write_string` cho mọi nhãn danh mục bắt đầu bằng `=`, `+`, `-`, `@`. Tên sheet được chuẩn hoá an toàn (`safe_sheet_name` ≤ 31 ký tự, lọc ký tự cấm).
+- **Xuất PDF Vector qua `window.print()` phía Client:**
+  - Lựa chọn giải pháp in trang tài liệu A4 (`ReportDocument`) thông qua lệnh in vector của trình duyệt thay vì chụp ảnh canvas bitmap (`html2canvas` + `jsPDF`) hoặc dựng renderer riêng (`@react-pdf/renderer`).
+  - Lợi ích: Văn bản và biểu đồ SVG vector sắc nét 100%, có thể bôi đen/sao chép/tìm kiếm chữ, kiểm soát ngắt trang chuẩn bằng CSS `@page` và `break-inside: avoid`, không làm phình dung lượng file và không cần cài đặt hạ tầng Chromium không đầu (Playwright/WeasyPrint) nặng nề trên server.
+- **Xuất ảnh PNG từng biểu đồ (`html-to-image`):**
+  - Chụp toàn bộ thẻ `ChartCard` (bao gồm tiêu đề, biểu đồ SVG, chú giải Legend HTML bên ngoài SVG, và chú thích caption) với `pixelRatio: 2` trên nền sáng chuẩn in ấn.
+
+### 3.5. File Storage tạm
 - Lưu file CSV người dùng tải lên trong phạm vi phiên làm việc (session), không lưu trữ vĩnh viễn ở giai đoạn MVP.
 
 ---
@@ -110,14 +122,15 @@ tiếp trong tiến trình chính của mình.
 
 | Thành phần | Công nghệ | Trạng thái |
 |---|---|---|
-| Backend framework | FastAPI | Đã scaffold (`backend/app/main.py`) |
+| Backend framework | FastAPI | Đã triển khai (`backend/app/main.py`) |
 | Xử lý dữ liệu | pandas + openpyxl | Đã cài đặt (O1, bao gồm đọc .xlsx) |
+| Xuất báo cáo Excel | XlsxWriter | Đã cài đặt (`backend/app/modules/excel_exporter.py`) |
 | Validation / I/O contract | Pydantic v2 | Đã định nghĩa (`backend/app/schemas.py`) |
-| LLM | Gemini API (google-genai) + Claude API (Anthropic) | Đã tích hợp Tụàn 3 (`llm_client.py`) |
-| Sandbox | Docker container / subprocess giới hạn quyền | Chưa cài đặt — dự kiến Tuần 4 |
-| Biểu đồ | Plotly hoặc Recharts | Chưa tích hợp — dự kiến Tuần 5 |
-| Frontend | React | Chưa khởi tạo — dự kiến Tuần 7 |
-| CI | GitHub Actions (`.github/workflows/ci.yml`) | Đã cấu hình cơ bản (lint + test) |
+| LLM | Gemini API (`google-genai`) làm mặc định + Claude API (`anthropic`) qua `LLMClient` Protocol | Đã tích hợp (`llm_client.py`) |
+| Sandbox | Subprocess spawn + AST check cô lập | Đã hoàn thành Tuần 4 |
+| Biểu đồ | Recharts + CSS Design Tokens | Đã tích hợp Tuần 7 |
+| Frontend | React + TypeScript + Vite | Đã hoàn thành (Giao diện chuẩn hóa, App Rail, Query Bar, ChartCard) |
+| CI/CD | GitLab CI / GitHub Actions | Đã cấu hình lint, test, docker build & deploy |
 
 ---
 
@@ -128,21 +141,24 @@ tiếp trong tiến trình chính của mình.
 3. **Lọc lỗi nhiều tầng** ở O3b — loại bỏ ứng viên lỗi biên dịch, tự sinh lại khi thất bại, giới hạn số lần thử để tránh vòng lặp vô hạn / chi phí API không kiểm soát.
 4. **Tự đánh giá chất lượng đầu ra** ở O5 (tinh thần SEVQ) — trước khi trả nhận xét về cho người dùng.
 5. **Module hóa rõ ràng theo interface (I/O contract)** — mỗi module có thể phát triển, kiểm thử, thay thế độc lập (NFR-05), đúng tinh thần "flexible" mà LIDA đề cao.
+6. **Kiến trúc giải trình & kiểm chứng (Verifiability)** — Báo cáo xuất ra (PDF/Excel) luôn kèm theo Phụ lục bảng số liệu chi tiết và phương pháp tính toán để người dùng và các bên liên quan kiểm tra đối chiếu.
 
 ---
 
-## 6. Trạng thái hiện tại (Tuần 4/8)
+## 6. Trạng thái hiện tại
 
-| Module | Trạng thái |
+| Module / Tính năng | Trạng thái |
 |---|---|
-| O1 — Data Profiler (Stage 0+1+2) | ✅ Đầy đủ — 13+ test |
-| O2 — Question Interpreter | ✅ Đầy đủ — 10 test, endpoint `/interpret` |
-| O3a — Code Generator | ✅ Tuần 4 — 3 scaffold, 3 bộ few-shot, error feedback, 8 test |
-| O3b — Sandbox Executor | ✅ Tuần 4 — AST check + spawn timeout + exec giới hạn, 12 test |
-| Orchestrator (analysis_runner) | ✅ Tuần 4 — lọc thời gian + retry 3 lần, 5 test |
-| O4 — Chart Generator | ⏳ Stub — Tuần 5 |
-| O5 — Insight Generator | ⏳ Stub — Tuần 6 |
-| Frontend | ⏳ Chưa khởi tạo — Tuần 7 |
+| O1 — Data Profiler (Stage 0+1+2) | ✅ Hoàn thành — hỗ trợ số Việt Nam, từ điển tên hiển thị, đơn vị |
+| O2 — Question Interpreter | ✅ Hoàn thành — prompt few-shot, grounding check |
+| O3a — Code Generator | ✅ Hoàn thành — 3 scaffold, error feedback loop |
+| O3b — Sandbox Executor | ✅ Hoàn thành — AST check 3 lớp, spawn timeout OS |
+| Orchestrator (analysis_runner) | ✅ Hoàn thành — retry 3 lần, lọc thời gian tất định |
+| O4 — Chart Generator | ✅ Hoàn thành — 5 loại biểu đồ, Việt hóa tiêu đề |
+| Perspective Planner | ✅ Hoàn thành — 6 góc nhìn bổ sung tất định, caption tự động |
+| O5 — Insight Generator | ✅ Hoàn thành — trích xuất số liệu, SEVQ, bảo toàn tên nhóm thực tế |
+| Frontend UI Redesign | ✅ Hoàn thành — App Rail, Query Bar, Result Toolbar, ChartCard chuẩn A5, tokens.css |
+| Tính năng Xuất báo cáo | ✅ Hoàn thành — PDF A4 vector, Excel gốc XlsxWriter, PNG thẻ, CSV UTF-8 BOM |
 
 ---
 

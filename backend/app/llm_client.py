@@ -52,6 +52,9 @@ class LLMClient(Protocol):
         ma khong duoc loi gi. Cac module can JSON co cau truc van dung
         complete_json().
         """
+    @property
+    def model_name(self) -> str:
+        """Ten model dang duoc su dung."""
         ...
 
 
@@ -72,6 +75,10 @@ class ClaudeClient:
 
         self._client = anthropic.Anthropic(api_key=api_key)
         self._model = model
+
+    @property
+    def model_name(self) -> str:
+        return self._model
 
     def complete_json(self, prompt: str) -> dict:
         response = self._client.messages.create(
@@ -125,6 +132,10 @@ class GeminiClient:
         key = api_key or os.environ.get("GEMINI_API_KEY")
         self._client = genai.Client(api_key=key)
         self._model = model
+
+    @property
+    def model_name(self) -> str:
+        return self._model
 
 
     def complete_json(self, prompt: str) -> dict:

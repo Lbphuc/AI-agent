@@ -66,6 +66,8 @@ export interface ChartSpec {
   perspective?: Perspective;
   caption?: string | null;
   highlight_series?: string | null;
+  display_name?: string | null;
+  unit?: string | null;
 }
 
 export interface InsightResult {
@@ -73,11 +75,38 @@ export interface InsightResult {
   confidence_score: number | null;
 }
 
+export interface ReportMeta {
+  generated_at: string;
+  model_name: string;
+  rows_total: number;
+  rows_used: number;
+  goal_summary: string;
+  notes: string[];
+}
+
 export interface AnalyzeResponse {
   goal: AnalysisGoal;
   task_results: TaskResult[];
   charts: ChartSpec[];
   insight: InsightResult | null;
+  meta?: ReportMeta | null;
+}
+
+export interface ExportSections {
+  summary?: boolean;
+  insight?: boolean;
+  primary_chart?: boolean;
+  supplementary_charts?: boolean;
+  data_tables?: boolean;
+  methodology?: boolean;
+  calculation_notes?: boolean;
+}
+
+export interface ExportXlsxRequest {
+  response: AnalyzeResponse;
+  filename?: string;
+  org_name?: string | null;
+  sections?: ExportSections;
 }
 
 /** Lỗi trả về từ FastAPI (HTTPException detail) */

@@ -21,6 +21,38 @@ mở rộng từ ý tưởng SUMMARIZER / GOAL EXPLORER / VISGENERATOR của LID
 - [x] Module O5 — Insight Generator (trích xuất số liệu, đánh giá SEVQ)
 - [x] Frontend — Web UI React + Vite + Recharts
 - [x] **Dashboard đa góc nhìn (Perspective Planner):** Tự động bổ sung các biểu đồ phân rã tất định (xu hướng nhóm, tỷ trọng, biến động kỳ, đóng góp thay đổi...) kèm chú thích tự động không tốn thêm độ trễ LLM.
+- [x] **Thiết kế lại giao diện & Xuất báo cáo (PDF, Excel, PNG, CSV):** App Rail điều hướng mở rộng, Query Bar thu gọn, chuẩn hóa thẻ biểu đồ ChartCard (giải quyết 100% lỗi hiển thị), Design Tokens, bộ xuất báo cáo đa định dạng kèm biểu đồ Excel gốc và in PDF vector A4.
+
+### CHANGELOG — Thiết kế lại Giao diện & Xuất Báo cáo
+
+- **Hệ thống Design Token & Bố cục Workspace mới (`tokens.css`, `features.ts`, `AppHeader`, `AppRail`, `QueryBar`, `ResultToolbar`):**
+  - Hệ thống biến CSS Token chuẩn hóa: Màu nền tối đa tầng (`--bg-app`, `--bg-surface`, `--bg-elevated`, `--border`), màu ngữ nghĩa (`--accent`, `--pos`, `--neg`, `--warn`), và bảng màu chuỗi 8 màu Okabe-Ito tối ưu độ tương phản cho người khiếm thị màu.
+  - Header 56px nền đặc (`var(--bg-surface)`), sticky `top: 0`, `z-index: 50` ngăn ngừa triệt để lỗi chữ chồng chữ khi cuộn trang.
+  - Thanh điều hướng bên trái **App Rail** (64px chỉ icon $\leftrightarrow$ 232px mở rộng), ghi nhớ trạng thái trong `localStorage`. Tích hợp kiến trúc cấu hình mở rộng qua `features.ts` (các mục *Lịch sử, Đã lưu, Cài đặt* ở trạng thái `soon` hiển thị mờ, tooltip "Sắp có", không phá vỡ bố cục).
+  - Trạng thái trang thông minh: Chuyển đổi từ Landing (biểu mẫu ở giữa) sang Workspace (biểu mẫu thu gọn thành **Query Bar** sticky `top: 56px`, `z-index: 40` với nút [Sửa] và [Hỏi lại]), giúp người dùng thấy ngay kết quả phân tích trong màn hình đầu tiên (1440x900) mà không cần cuộn trang.
+  - Lưới kết quả Responsive 12 cột tự động co giãn (`perspective -> span`), thẻ nửa hàng lẻ tự động bung rộng 12 cột.
+- **Chuẩn hóa Thẻ Biểu đồ (`ChartCard`) & Khắc phục triệt để lỗi hiển thị (Bảng A5):**
+  - Loại bỏ viền trắng focus mặc định xung quanh biểu đồ của Recharts.
+  - Xử lý nhãn trục X dính chữ bằng `tickFormatter` định dạng ngắn gọn ("T1/26"), `interval="preserveStartEnd"`, `minTickGap={24}` và padding trục.
+  - Trục Y và tooltip định dạng số chuẩn Việt Nam (`vi-VN`), đơn vị hiển thị tại phụ đề thay vì hậu tố rời rạc.
+  - Biểu đồ "Đóng góp thay đổi" hiển thị cột âm đỏ (`var(--neg)`), cột dương xanh (`var(--pos)`), bổ sung đường tham chiếu `<ReferenceLine y={0}/>` và nhãn có dấu `+`/`−`.
+  - Tooltip tùy biến `ChartTooltip` với màu sắc và bo góc đồng bộ Design Tokens.
+  - Tập trung 100% việc định dạng số vào `src/utils/formatters.ts` (`formatNumber`, `formatPercent`, `formatSignedChange`), loại bỏ hoàn toàn các lệnh `toFixed()` phân mảnh.
+  - Menu ba chấm trên mỗi thẻ hỗ trợ tải nhanh ảnh PNG độ nét cao hoặc tải file CSV dữ liệu thô.
+- **Tính năng Xuất Báo Cáo Đa Định Dạng (Phần B):**
+  - **PDF Vector qua `window.print()`:** Dựng trang báo cáo A4 chuyên nghiệp (`ReportDocument`) trong `#print-root` ẩn ngoài màn hình (`position: fixed; left: -10000px; width: 794px`, không dùng `display: none` để Recharts đo đạc kích thước chuẩn xác). Tắt animation biểu đồ (`isAnimationActive={false}`), chủ đề in nền trắng mực tiết kiệm (`[data-theme="print"]`), ngắt trang chuẩn `break-inside: avoid`. Báo cáo bao gồm đầy đủ **Phụ lục A (Bảng số liệu)** và **Phụ lục B (Cách tính & Lưu ý giải trình)**.
+  - **Excel (.xlsx) Backend Native (`/export/xlsx`):** Endpoint FastAPI dùng `xlsxwriter` xuất file workbook gồm Sheet "Tóm tắt", từng Sheet cho mỗi biểu đồ kèm bảng số liệu và **biểu đồ Excel gốc (native chart)** cho phép người dùng tùy biến lại trong Excel. Tích hợp cơ chế chống tấn công Formula Injection (ép kiểu `write_string` cho nhãn `= + - @`), chuẩn hóa tên sheet an toàn.
+  - **Ảnh PNG (`html-to-image`):** Chụp toàn bộ thẻ `ChartCard` (bao gồm tiêu đề, biểu đồ SVG, chú giải Legend HTML bên ngoài SVG, và chú thích) với `pixelRatio: 2` và đóng dấu "Tạo bởi AI Agent BI".
+  - **CSV & Sao chép:** Hàm thuần `buildCsv` bổ sung UTF-8 BOM (`\uFEFF`) và escape ký tự công thức; nút sao chép nhanh nhận xét AI vào clipboard.
+- **Việt hóa & Bỏ thuật ngữ kỹ thuật (Phần A6):**
+  - Bổ sung từ điển thuật ngữ kinh doanh (`business_terms.py`) và trích xuất đơn vị/tên hiển thị trong `DataProfile` và `ChartSpec`.
+  - Nhận xét và thanh tóm tắt hiển thị thân thiện: *"Hệ thống hiểu câu hỏi của bạn là: ..."*.
+  - Ẩn thanh độ tin cậy khi $\ge 0.8$, chỉ hiển thị cảnh báo đối chiếu khi $< 0.8$; số liệu chi tiết đưa vào khối kỹ thuật thu gọn.
+  - Cập nhật prompt O5 bảo toàn nguyên vẹn tên nhóm thực tế từ dữ liệu.
+- **Kiểm thử & Chất lượng:**
+  - **155/155 tests backend pass 100%** (`pytest backend/tests`).
+  - **14/14 tests frontend pass 100%** (`npm test` với Vitest).
+  - Build frontend Vite thành công sạch sẽ trong 405ms.
 
 ### CHANGELOG — Dashboard đa góc nhìn (Perspective Planner)
 
