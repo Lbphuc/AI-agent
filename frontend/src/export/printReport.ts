@@ -18,12 +18,14 @@ export function triggerPrintReport(filename: string): void {
 
   window.addEventListener("afterprint", handleAfterPrint);
 
-  // Đợi 100ms để SVG / DOM hoàn thành render
+  // Đợi React cập nhật state, DOM & SVG charts hoàn thành render
   setTimeout(() => {
-    window.print();
-    // Fallback nếu trình duyệt không bắn afterprint
-    setTimeout(() => {
-      document.title = originalTitle;
-    }, 2000);
-  }, 150);
+    requestAnimationFrame(() => {
+      window.print();
+      // Fallback nếu trình duyệt không bắn afterprint
+      setTimeout(() => {
+        document.title = originalTitle;
+      }, 2000);
+    });
+  }, 300);
 }

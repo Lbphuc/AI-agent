@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import type { FormEvent } from "react";
 import { analyzeData } from "./api/client";
 import type { AnalyzeResponse, ExportSections } from "./api/types";
@@ -384,11 +385,17 @@ export default function App() {
       />
 
       {/* ── 5. KHỐI IN VECTOR ẨN (#print-root) CHO BÁO CÁO A4 ── */}
-      {reportModel && (
-        <div id="print-root">
-          <ReportDocument model={reportModel} />
-        </div>
-      )}
+      {reportModel && (() => {
+        const printContainer = document.getElementById("print-root");
+        if (printContainer) {
+          return createPortal(<ReportDocument model={reportModel} />, printContainer);
+        }
+        return (
+          <div id="print-root">
+            <ReportDocument model={reportModel} />
+          </div>
+        );
+      })()}
     </div>
   );
 }
