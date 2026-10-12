@@ -99,7 +99,7 @@ deploy-production:
         docker pull ${CI_REGISTRY_IMAGE}:latest
         docker stop ai-agent-app || true
         docker rm ai-agent-app || true
-        docker run -d --name ai-agent-app -p 8000:8000 --restart unless-stopped ${CI_REGISTRY_IMAGE}:latest
+        docker run -d --name ai-agent-app -p 8000:8000 -e GEMINI_API_KEY='${GEMINI_API_KEY}' --restart unless-stopped ${CI_REGISTRY_IMAGE}:latest
       "
   rules:
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
