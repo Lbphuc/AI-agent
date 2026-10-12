@@ -31,7 +31,7 @@ const PALETTE = [
   "hsl(190, 80%, 52%)",
 ];
 
-const HIGHLIGHT_COLOR = "hsl(0, 80%, 62%)";  // đỏ – dùng cho highlight_x
+const HIGHLIGHT_COLOR = "hsl(0, 80%, 62%)";  // đỏ – dùng cho highlight_x và highlight_series
 
 /** Format số lớn: 1.500.000 → 1.5M */
 function formatValue(v: number): string {
@@ -56,30 +56,92 @@ function buildRows(spec: ChartSpec): Record<string, string | number>[] {
   });
 }
 
-function taskTypeLabel(title: string): string {
-  const t = title.toLowerCase();
-  if (t.includes("xu hướng") || t.includes("trend")) return "Xu hướng";
-  if (t.includes("tăng trưởng") || t.includes("tăng/giảm")) return "Tăng trưởng";
-  return "So sánh";
+function perspectiveTag(spec: ChartSpec): { label: string; tagClass: string } {
+  if (spec.perspective === "trend_by_group") {
+    return { label: "Xu hướng nhóm", tagClass: "badge-blue" };
+  }
+  if (spec.perspective === "share_of_total") {
+    return { label: "Tỷ trọng", tagClass: "badge-purple" };
+  }
+  if (spec.perspective === "period_change") {
+    return { label: "Biến động kỳ", tagClass: "badge-orange" };
+  }
+  if (spec.perspective === "contribution_to_change") {
+    return { label: "Đóng góp thay đổi", tagClass: "badge-green" };
+  }
+  if (spec.perspective === "cumulative") {
+    return { label: "Lũy kế", tagClass: "badge-blue" };
+  }
+  if (spec.perspective === "moving_average") {
+    return { label: "Trung bình trượt", tagClass: "badge-blue" };
+  }
+
+  const t = spec.title.toLowerCase();
+  if (t.includes("xu hướng") || t.includes("trend")) {
+    return { label: "Xu hướng", tagClass: "badge-blue" };
+  }
+  if (t.includes("tăng trưởng") || t.includes("tăng/giảm")) {
+    return { label: "Tăng trưởng", tagClass: "badge-orange" };
+  }
+  return { label: "So sánh", tagClass: "badge-purple" };
 }
 
 export default function ChartPanel({ charts }: Props) {
   if (charts.length === 0) return null;
 
+  const primaryCharts = charts.filter((c) => c.role !== "supplementary");
+  const supplementaryCharts = charts.filter((c) => c.role === "supplementary");
+
   return (
     <div className="chart-panel animate-fade-in-up">
-      <h2 className="chart-panel-title">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-        Biểu Đồ Phân Tích
-      </h2>
+      {/* ── BIỂU ĐỒ CHÍNH (PRIMARY) ── */}
+      <div className="chart-section primary-section">
+        <div className="section-header">
+          <div className="section-title-row">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <h2 className="chart-panel-title">Biểu Đồ Trả Lời Chính</h2>
+            <span className="badge badge-blue">{primaryCharts.length} biểu đồ</span>
+          </div>
+        </div>
 
-      <div className="chart-grid">
-        {charts.map((spec, idx) => (
-          <ChartCard key={idx} spec={spec} colorOffset={idx} />
-        ))}
+        <div className="chart-grid primary-grid">
+          {primaryCharts.map((spec, idx) => (
+            <ChartCard key={spec.perspective || `primary-${idx}`} spec={spec} colorOffset={idx} />
+          ))}
+        </div>
       </div>
+
+      {/* ── GÓC NHÌN BỔ SUNG (SUPPLEMENTARY) ── */}
+      {supplementaryCharts.length > 0 && (
+        <div className="chart-section supplementary-section animate-fade-in">
+          <div className="section-header supplementary-header">
+            <div className="section-title-row">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <polygon points="12 2 2 7 12 12 22 7 12 2" stroke="currentColor" strokeWidth="2"/>
+                <polyline points="2 17 12 22 22 17" stroke="currentColor" strokeWidth="2"/>
+                <polyline points="2 12 12 17 22 12" stroke="currentColor" strokeWidth="2"/>
+              </svg>
+              <h2 className="chart-panel-title">Góc Nhìn Bổ Sung</h2>
+              <span className="badge badge-purple">{supplementaryCharts.length} góc nhìn</span>
+            </div>
+            <p className="section-desc">
+              Tự động phân rã chi tiết để giải thích toàn diện hiện tượng phía sau con số tổng quát
+            </p>
+          </div>
+
+          <div className="chart-grid supplementary-grid">
+            {supplementaryCharts.map((spec, idx) => (
+              <ChartCard
+                key={spec.perspective || `supp-${idx}`}
+                spec={spec}
+                colorOffset={idx + primaryCharts.length}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -89,14 +151,17 @@ function ChartCard({ spec, colorOffset }: { spec: ChartSpec; colorOffset: number
   const seriesKeys = Object.keys(spec.series);
   const isPercent = seriesKeys.some((k) => k.toLowerCase().includes("%") || k.toLowerCase().includes("rate"));
 
-  const tagLabel = taskTypeLabel(spec.title);
-  const tagClass = tagLabel === "Xu hướng" ? "badge-blue" : tagLabel === "Tăng trưởng" ? "badge-orange" : "badge-purple";
+  const { label: tagLabel, tagClass } = perspectiveTag(spec);
+  const isMultiSeries = seriesKeys.length > 1;
 
   return (
-    <div className="chart-card card animate-fade-in-up">
+    <div className={`chart-card card animate-fade-in-up ${spec.role === "supplementary" ? "card-supplementary" : ""}`}>
       <div className="chart-card-header">
         <div className="chart-card-title-row">
           <span className={`badge ${tagClass}`}>{tagLabel}</span>
+          {spec.role === "supplementary" && (
+            <span className="badge badge-ghost">Bổ sung</span>
+          )}
           <h3 className="chart-card-title">{spec.title}</h3>
         </div>
       </div>
@@ -120,20 +185,34 @@ function ChartCard({ spec, colorOffset }: { spec: ChartSpec; colorOffset: number
                 width={60}
               />
               <Tooltip content={<CustomTooltip isPercent={isPercent} />} />
-              {seriesKeys.length > 1 && (
+              {isMultiSeries && (
                 <Legend wrapperStyle={{ fontSize: "13px", color: "hsl(220, 15%, 65%)" }} />
               )}
-              {seriesKeys.map((key, i) => (
-                <Line
-                  key={key}
-                  type="monotone"
-                  dataKey={key}
-                  stroke={SERIES_COLORS[(colorOffset + i) % SERIES_COLORS.length]}
-                  strokeWidth={2.5}
-                  dot={{ r: 4, fill: SERIES_COLORS[(colorOffset + i) % SERIES_COLORS.length] }}
-                  activeDot={{ r: 6 }}
-                />
-              ))}
+              {seriesKeys.map((key, i) => {
+                const isHighlighted = spec.highlight_series === key;
+                const strokeColor = isHighlighted
+                  ? HIGHLIGHT_COLOR
+                  : SERIES_COLORS[(colorOffset + i) % SERIES_COLORS.length];
+                const strokeWidth = isHighlighted ? 3.5 : (spec.highlight_series ? 1.8 : 2.5);
+                const strokeOpacity = (spec.highlight_series && !isHighlighted) ? 0.35 : 1;
+
+                return (
+                  <Line
+                    key={key}
+                    type="monotone"
+                    dataKey={key}
+                    stroke={strokeColor}
+                    strokeWidth={strokeWidth}
+                    strokeOpacity={strokeOpacity}
+                    dot={{
+                      r: isHighlighted ? 5 : 3.5,
+                      fill: strokeColor,
+                      fillOpacity: strokeOpacity,
+                    }}
+                    activeDot={{ r: 6 }}
+                  />
+                );
+              })}
             </LineChart>
           ) : spec.chart_type === "area" ? (
             <AreaChart data={rows} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
@@ -152,7 +231,7 @@ function ChartCard({ spec, colorOffset }: { spec: ChartSpec; colorOffset: number
                 width={60}
               />
               <Tooltip content={<CustomTooltip isPercent={isPercent} />} />
-              {seriesKeys.length > 1 && (
+              {isMultiSeries && (
                 <Legend wrapperStyle={{ fontSize: "13px", color: "hsl(220, 15%, 65%)" }} />
               )}
               {seriesKeys.map((key, i) => (
@@ -198,12 +277,12 @@ function ChartCard({ spec, colorOffset }: { spec: ChartSpec; colorOffset: number
                     <Cell
                       key={String(row.label)}
                       fill={
-                        spec.highlight_x && row.label === spec.highlight_x
+                        !isMultiSeries && spec.highlight_x && row.label === spec.highlight_x
                           ? HIGHLIGHT_COLOR
                           : SERIES_COLORS[(colorOffset + i) % SERIES_COLORS.length]
                       }
                       fillOpacity={
-                        spec.highlight_x && row.label !== spec.highlight_x ? 0.65 : 1
+                        !isMultiSeries && spec.highlight_x && row.label !== spec.highlight_x ? 0.65 : 1
                       }
                     />
                   ))}
@@ -253,7 +332,7 @@ function ChartCard({ spec, colorOffset }: { spec: ChartSpec; colorOffset: number
                 width={60}
               />
               <Tooltip content={<CustomTooltip isPercent={isPercent} />} />
-              {seriesKeys.length > 1 && (
+              {isMultiSeries && (
                 <Legend wrapperStyle={{ fontSize: "13px", color: "hsl(220, 15%, 65%)" }} />
               )}
               {seriesKeys.map((key, i) => (
@@ -267,12 +346,12 @@ function ChartCard({ spec, colorOffset }: { spec: ChartSpec; colorOffset: number
                     <Cell
                       key={String(row.label)}
                       fill={
-                        spec.highlight_x && row.label === spec.highlight_x
+                        !isMultiSeries && spec.highlight_x && row.label === spec.highlight_x
                           ? HIGHLIGHT_COLOR
                           : SERIES_COLORS[(colorOffset + i) % SERIES_COLORS.length]
                       }
                       fillOpacity={
-                        spec.highlight_x && row.label !== spec.highlight_x ? 0.65 : 1
+                        !isMultiSeries && spec.highlight_x && row.label !== spec.highlight_x ? 0.65 : 1
                       }
                     />
                   ))}
@@ -283,7 +362,16 @@ function ChartCard({ spec, colorOffset }: { spec: ChartSpec; colorOffset: number
         </ResponsiveContainer>
       </div>
 
-      {spec.highlight_x && (
+      {/* Ghi chú nổi bật (Target / Highlight) */}
+      {spec.highlight_series && (
+        <div className="chart-highlight-note">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Tập trung vào đường: <strong>{spec.highlight_series}</strong>
+        </div>
+      )}
+      {spec.highlight_x && !isMultiSeries && (
         <div className="chart-highlight-note">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
             <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
@@ -291,6 +379,18 @@ function ChartCard({ spec, colorOffset }: { spec: ChartSpec; colorOffset: number
             <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>
           Nổi bật: <strong>{spec.highlight_x}</strong>
+        </div>
+      )}
+
+      {/* Caption nhận xét tất định */}
+      {spec.caption && (
+        <div className="chart-caption">
+          <div className="chart-caption-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2"/>
+            </svg>
+          </div>
+          <p className="chart-caption-text">{spec.caption}</p>
         </div>
       )}
     </div>

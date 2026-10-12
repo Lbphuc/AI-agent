@@ -195,13 +195,24 @@ def _sandbox_worker(
         })
         return
 
-    # Chuyển Series/DataFrame thành dict để có thể truyền qua queue
+    def _sanitize_for_json(item: Any) -> Any:
+        if isinstance(item, dict):
+            return {str(k): _sanitize_for_json(v) for k, v in item.items()}
+        if isinstance(item, (list, tuple)):
+            return [_sanitize_for_json(v) for v in item]
+        if hasattr(item, "item") and callable(getattr(item, "item")):
+            return item.item()
+        if pd.isna(item):
+            return None
+        return item
+
+    # Chuyển Series/DataFrame thành dict và khử mọi tuple keys / NaN để JSON-safe
     serializable: dict[str, Any] = {}
     for key, val in result.items():
         if hasattr(val, "to_dict"):
-            serializable[key] = val.to_dict()
+            serializable[str(key)] = _sanitize_for_json(val.to_dict())
         else:
-            serializable[key] = val
+            serializable[str(key)] = _sanitize_for_json(val)
 
     result_queue.put({"success": True, "results": serializable})
 

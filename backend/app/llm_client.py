@@ -103,18 +103,20 @@ class GeminiClient:
     `api_key=None`: SDK tự đọc biến môi trường GEMINI_API_KEY.
     """
 
-    # Thử lần lượt các model nếu model trước bị 503/overload.
-    # Chỉ liệt kê models có RPD > 0 theo rate limits của key này.
+    # Thử lần lượt các model nếu model trước bị 503/overload/429.
+    # Ưu tiên các model nhẹ (flash-lite) để đảm bảo không bị nghẽn quota free tier.
     _FALLBACK_MODELS = [
-        "gemini-3.5-flash",
-        "gemini-3.7-flash",
+        "gemini-3.5-flash-lite",  # Hoạt động tốt, phản hồi nhanh, quota dồi dào
+        "gemini-3.5-flash",       # Flash chuẩn
+        "gemini-3.1-flash-lite",  # Fallback phụ
+        "gemini-3.7-flash",       # Fallback mở rộng
         "gemini-3.8-flash",
-        "gemini-3.6-flash",   # thêm vào cuối (Google đề xuất trong log)
+        "gemini-3.6-flash",
     ]
 
     def __init__(
         self,
-        model: str = "gemini-3.5-flash",
+        model: str = "gemini-3.5-flash-lite",
         api_key: str | None = None,
     ):
         import os
@@ -133,7 +135,7 @@ class GeminiClient:
 
         _logger = logging.getLogger(__name__)
 
-        # Thử primary model trước, sau đó fallback models nếu gặp 503
+        # Thử primary model trước, sau đó fallback models nếu gặp 503 / 429
         models_to_try = [self._model] + [
             m for m in self._FALLBACK_MODELS if m != self._model
         ]
@@ -175,26 +177,26 @@ class GeminiClient:
                     return json.loads(text)
 
                 except Exception as exc:
-                    err_str = str(exc)
+                    err_str = str(exc).lower()
                     last_exc = exc
-                    # Nếu là lỗi quá tải máy chủ Google (503/UNAVAILABLE) và là lần thử đầu: đợi 2s
-                    if any(code in err_str for code in ("503", "UNAVAILABLE", "overloaded")) and attempt == 0:
-                        _logger.warning("Model %s gặp 503 (quá tải tạm thời). Đợi 2s thử lại...", model)
-                        time.sleep(2.0)
+                    # Nếu là lỗi quá tải máy chủ Google (503/UNAVAILABLE) và là lần thử đầu: đợi 1.5s
+                    if any(code in err_str for code in ("503", "unavailable", "overloaded")) and attempt == 0:
+                        _logger.warning("Model %s gặp 503 (quá tải tạm thời). Đợi 1.5s thử lại...", model)
+                        time.sleep(1.5)
                         continue
 
-                    # Bỏ qua model và chuyển model tiếp theo nếu gặp mã lỗi hạ tầng
-                    skip_codes = ("503", "UNAVAILABLE", "overloaded", "404", "NOT_FOUND", "429", "RATE")
+                    # Bỏ qua model và chuyển model tiếp theo nếu gặp mã lỗi hạ tầng / quota
+                    skip_codes = ("503", "unavailable", "overloaded", "404", "not_found", "429", "rate", "resource_exhausted", "quota")
                     if any(code in err_str for code in skip_codes):
-                        _logger.warning("Model %s lỗi %s, chuyển sang model tiếp theo...", model, err_str[:60])
-                        time.sleep(1.0)
+                        _logger.warning("Model %s lỗi %s, chuyển sang model tiếp theo...", model, str(exc)[:80])
+                        time.sleep(0.5)
                         break
                     raise  # Lỗi khác (auth 400, ...) → raise ngay
 
 
-        # Tat ca models deu 503
+        # Tat ca models deu loi
         raise Exception(
-            f"Tat ca Gemini models deu khong kha dung (503). "
+            f"Tat ca Gemini models deu khong kha dung (503/429). "
             f"Loi cuoi: {last_exc}"
         )
 
@@ -226,16 +228,16 @@ class GeminiClient:
                         raise ValueError("Gemini tra ve text=None")
                     return text.strip()
                 except Exception as exc:
-                    err_str = str(exc)
+                    err_str = str(exc).lower()
                     last_exc = exc
-                    if any(c in err_str for c in ("503", "UNAVAILABLE", "overloaded")) and attempt == 0:
-                        _logger.warning("complete_text: model %s gap 503, doi 2s...", model)
-                        time.sleep(2.0)
+                    if any(c in err_str for c in ("503", "unavailable", "overloaded")) and attempt == 0:
+                        _logger.warning("complete_text: model %s gap 503, doi 1.5s...", model)
+                        time.sleep(1.5)
                         continue
-                    skip_codes = ("503", "UNAVAILABLE", "overloaded", "404", "NOT_FOUND", "429", "RATE")
+                    skip_codes = ("503", "unavailable", "overloaded", "404", "not_found", "429", "rate", "resource_exhausted", "quota")
                     if any(c in err_str for c in skip_codes):
                         _logger.warning("complete_text: model %s loi, thu model khac...", model)
-                        time.sleep(1.0)
+                        time.sleep(0.5)
                         break
                     raise
 

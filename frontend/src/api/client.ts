@@ -17,11 +17,13 @@ const BASE = import.meta.env.VITE_API_BASE_URL ?? "";
  */
 export async function analyzeData(
   file: File,
-  question: string
+  question: string,
+  expandViews: boolean = true
 ): Promise<AnalyzeResponse> {
   const form = new FormData();
   form.append("file", file);
   form.append("question", question);
+  form.append("expand_views", String(expandViews));
 
   let res: Response;
   try {
@@ -54,8 +56,9 @@ export async function analyzeData(
     // Map HTTP status → message thân thiện
     if (res.status === 400) throw new Error(`File không hợp lệ: ${detail}`);
     if (res.status === 422) throw new Error(`Không phân tích được: ${detail}`);
+    if (res.status === 500) throw new Error(`Lỗi máy chủ (500): ${detail}`);
     if (res.status === 502) throw new Error(`Backend chưa khởi động hoặc không thể kết nối. Vui lòng chạy: uvicorn backend.app.main:app --reload`);
-    if (res.status === 503) throw new Error(`Dịch vụ AI đang quá tải: ${detail}`);
+    if (res.status === 503) throw new Error(`Dịch vụ AI đang quá tải hoặc tạm thời hết quota: ${detail}`);
     throw new Error(detail);
   }
 

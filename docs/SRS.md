@@ -64,6 +64,7 @@ Chủ doanh nghiệp nhỏ, nhân viên kinh doanh/vận hành không có nền 
 | FR-12 | Hệ thống đọc được file Excel (.xlsx) và CSV với nhiều bảng mã (UTF-8, cp1258) và tự phát hiện dấu phân cách (dấu phẩy/chấm phẩy) | O1 — Data Profiler / main.py | Cao |
 | FR-13 | Hệ thống tự động nhận biết và chuyển đổi số định dạng Việt Nam ("1.500.000") thành giá trị số trước khi phân tích | O1 — Data Profiler (Stage 0) | Cao |
 | FR-14 | Hệ thống cho phép tải lên nhiều file cùng lúc và trả về DataProfile riêng biệt cho từng file (/profile-many) | O1 — Data Profiler / main.py | Trung bình |
+| FR-15 | Hệ thống hỗ trợ Dashboard đa góc nhìn (Perspective Planner) tự động bổ sung biểu đồ phân rã tất định (xu hướng nhóm, tỷ trọng, đóng góp thay đổi, lũy kế...) kèm chú thích tự động | Perspective Planner | Cao |
 
 ---
 
@@ -114,8 +115,9 @@ Interface chi tiết được định nghĩa bằng Pydantic trong `backend/app/
 | O3a — Code Generator | `task: AnalysisTask`, `DataProfile`, `previous_error: str \| None` | `CodeGenResult` (code, expected_outputs) |
 | O3b — Sandbox Executor | `code: str`, `df: DataFrame`, `timeout: int = 5` | `ExecutionResult` (success, results, error, attempts=1) |
 | Orchestrator (O3 Pipeline) | `task: AnalysisTask`, `profile: DataProfile`, `df: DataFrame`, `max_attempts: int = 3` | `ExecutionResult` (kết quả sau retry loop + error feedback) |
-| O4 — Chart Generator | `list[AnalysisTask]`, `ExecutionResult` | `list[ChartSpec]` (chart_type, title, x, series) |
-| O5 — Insight Generator | `question: str`, `ExecutionResult` | `InsightResult` (insight_text, confidence_score) |
+| O4 — Chart Generator | `list[TaskResult]` | `list[ChartSpec]` (chart_type, title, x, series, highlight_x, role="primary") |
+| Perspective Planner | `goal: AnalysisGoal`, `profile: DataProfile`, `df_filtered: DataFrame`, `task_results: list[TaskResult]` | `list[ChartSpec]` (role="supplementary", perspective, caption, highlight_series) |
+| O5 — Insight Generator | `question: str`, `list[TaskResult]` | `InsightResult` (insight_text, confidence_score) |
 
 Sơ đồ luồng dữ liệu đầy đủ: xem `docs/ARCHITECTURE.md`.
 

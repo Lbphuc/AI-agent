@@ -45,12 +45,27 @@ export interface TaskResult {
   execution: ExecutionResult;
 }
 
+export type Perspective =
+  | "primary"
+  | "period_change"
+  | "cumulative"
+  | "moving_average"
+  | "trend_by_group"
+  | "share_of_total"
+  | "contribution_to_change";
+
+export type ChartRole = "primary" | "supplementary";
+
 export interface ChartSpec {
   chart_type: ChartType;
   title: string;
   x: string[];
   series: Record<string, number[]>;
   highlight_x: string | null;
+  role?: ChartRole;
+  perspective?: Perspective;
+  caption?: string | null;
+  highlight_series?: string | null;
 }
 
 export interface InsightResult {

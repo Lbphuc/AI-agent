@@ -15,14 +15,21 @@ from pathlib import Path
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 import logging
 
 from .llm_client import GeminiClient
-from .modules import data_profiler, question_interpreter, analysis_runner, chart_generator, insight_generator
+from .modules import (
+    analysis_runner,
+    chart_generator,
+    data_profiler,
+    insight_generator,
+    perspective_planner,
+    question_interpreter,
+)
 from .schemas import AnalysisGoal, AnalyzeResponse, ChartSpec, DataProfile, TaskResult
 
 logger = logging.getLogger(__name__)
@@ -32,6 +39,17 @@ app = FastAPI(
     description="Dua tren kien truc pipeline lay cam hung tu LIDA (Dibia, 2023).",
     version="0.1.0",
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc):
+    """Bắt mọi ngoại lệ chưa được xử lý để trả về JSON chi tiết thay vì 500 câm."""
+    logger.exception("Lỗi không mong muốn trong server: %s", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Lỗi hệ thống ({type(exc).__name__}): {str(exc)}"},
+    )
+
 
 # Them som tu Tuan 2 de tranh chan tich hop frontend (React) o Tuan 7.
 # TODO (truoc khi trien khai that): gioi han allow_origins ve dung domain
@@ -193,7 +211,7 @@ def debug_llm() -> dict:
         from google import genai
         from google.genai import types
         client = genai.Client(api_key=key)
-        for model in ["gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-3.6-flash"]:
+        for model in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-3.6-flash"]:
             try:
                 resp = client.models.generate_content(
                     model=model,
@@ -324,7 +342,9 @@ async def chart_preview(
 @app.post("/analyze", response_model=AnalyzeResponse)
 @app.post("/api/analyze", response_model=AnalyzeResponse, include_in_schema=False)
 async def analyze(
-    file: UploadFile = File(...), question: str = Form(...)
+    file: UploadFile = File(...),
+    question: str = Form(...),
+    expand_views: bool = Form(True),
 ) -> AnalyzeResponse:
     """Endpoint chinh cua he thong (FR-01 den FR-09) — Pipeline end-to-end.
 
@@ -353,8 +373,17 @@ async def analyze(
             question_interpreter.interpret, question, profile, llm
         )
     except question_interpreter.QuestionInterpretationError as exc:
+        err_msg = str(exc)
+        if any(w in err_msg.lower() for w in ("503", "unavailable", "llm api", "429", "resource_exhausted", "quota")):
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    f"Dịch vụ AI đang quá tải hoặc tạm thời hết quota: {err_msg}. "
+                    "Vui lòng thử lại sau vài giây."
+                ),
+            ) from exc
         raise HTTPException(
-            status_code=422, detail=f"Khong hieu duoc cau hoi: {exc}"
+            status_code=422, detail=f"Không hiểu được câu hỏi: {exc}"
         ) from exc
 
     # O3: chay tung task, loi tung phan khong chan nhau
@@ -365,8 +394,27 @@ async def analyze(
         )
         task_results.append(TaskResult(task=task, execution=exec_result))
 
-    # O4: sinh ChartSpec (tat dinh, khong LLM)
-    charts = await run_in_threadpool(chart_generator.generate_charts, task_results)
+    # O4: sinh ChartSpec chinh (tat dinh, khong LLM)
+    primary_charts = await run_in_threadpool(chart_generator.generate_charts, task_results)
+
+    # Perspective Planner: sinh cac goc nhin bo sung (tat dinh, khong LLM)
+    supplementary_charts: list[ChartSpec] = []
+    if expand_views:
+        try:
+            df_filtered = analysis_runner.filter_by_time_range(
+                df, profile, goal.time_start, goal.time_end
+            )
+            supplementary_charts = await run_in_threadpool(
+                perspective_planner.expand,
+                goal,
+                profile,
+                df_filtered,
+                task_results,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Loi khi sinh goc nhin bo sung: %s", exc)
+
+    charts = primary_charts + supplementary_charts
 
     # O5: sinh insight (goi LLM), loi khong chan toan bo response
     insight_result = None

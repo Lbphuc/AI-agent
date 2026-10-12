@@ -21,6 +21,7 @@ export default function App() {
   const [appState, setAppState] = useState<AppState>("idle");
   const [file, setFile] = useState<File | null>(null);
   const [question, setQuestion] = useState("");
+  const [expandViews, setExpandViews] = useState(true);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [history, setHistory] = useState<{ question: string; result: AnalyzeResponse }[]>([]);
@@ -39,7 +40,7 @@ export default function App() {
       setErrorMsg(null);
 
       try {
-        const data = await analyzeData(file, question.trim());
+        const data = await analyzeData(file, question.trim(), expandViews);
         setResult(data);
         setHistory((prev) => [{ question: question.trim(), result: data }, ...prev.slice(0, 4)]);
         setAppState("result");
@@ -50,7 +51,7 @@ export default function App() {
         setAppState("error");
       }
     },
-    [canSubmit, file, question]
+    [canSubmit, file, question, expandViews]
   );
 
   const handleReset = useCallback(() => {
@@ -179,6 +180,21 @@ export default function App() {
                   {q}
                 </button>
               ))}
+            </div>
+
+            {/* Options */}
+            <div className="form-options">
+              <label className="checkbox-label" title="Tự động phân tích thêm các góc nhìn: xu hướng theo nhóm, tỷ trọng, biến động kỳ...">
+                <input
+                  type="checkbox"
+                  checked={expandViews}
+                  onChange={(e) => setExpandViews(e.target.checked)}
+                  disabled={isLoading}
+                />
+                <span className="checkbox-text">
+                  <strong>Hiển thị thêm góc nhìn</strong> (xu hướng theo chi nhánh, tỷ trọng, đóng góp thay đổi...)
+                </span>
+              </label>
             </div>
 
             {/* Submit */}

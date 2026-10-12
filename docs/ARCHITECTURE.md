@@ -19,17 +19,20 @@ flowchart TD
     C -->|AnalysisGoal| D[O3a: Code Generator]
     D -->|CodeGenResult| E[O3b: Sandbox Executor]
     E -->|"loi -> sinh lai (toi da N lan)"| D
-    E -->|ExecutionResult| F[O4: Chart Generator]
-    E -->|ExecutionResult| G[O5: Insight Generator]
-    F -->|"list[ChartSpec]"| H[Ket qua tong hop]
+    E -->|TaskResult| F[O4: Chart Generator]
+    E -->|TaskResult + df_filtered| P[Perspective Planner]
+    E -->|TaskResult| G[O5: Insight Generator]
+    F -->|"ChartSpec (primary)"| H[Kết quả tổng hợp]
+    P -->|"ChartSpec (supplementary)"| H
     G -->|InsightResult| H
-    H -->|"Bieu do + bang + nhan xet"| A
+    H -->|"Biểu đồ đa góc nhìn + nhận xét"| A
 
     style A fill:#94a3b8,color:#fff
     style H fill:#94a3b8,color:#fff
     style B fill:#2dd4bf,color:#000
     style E fill:#2dd4bf,color:#000
     style F fill:#2dd4bf,color:#000
+    style P fill:#2dd4bf,color:#000
     style C fill:#a78bfa,color:#000
     style D fill:#a78bfa,color:#000
     style G fill:#a78bfa,color:#000
@@ -37,6 +40,10 @@ flowchart TD
 
 **Chú thích màu:** xám = điểm vào/ra (I/O); teal = xử lý dữ liệu thuần
 túy (không gọi LLM); tím = bước bắt buộc gọi API LLM.
+
+**Triết lý phân tách LLM vs Tất định (Perspective Planner):**
+- **Câu trả lời chính:** Đi qua O3 (LLM sinh mã + sandbox + retry loop), đo bằng chỉ số AER phục vụ mục tiêu nghiên cứu của đồ án.
+- **Góc nhìn bổ sung (Dashboard đa góc nhìn):** Đi qua `Perspective Planner` bằng pandas thuần tất định (không gọi thêm LLM, không thêm sandbox). Cách này đảm bảo không làm đội thêm độ trễ (NFR-01 ≤ 15s), loại bỏ nguy cơ ảo giác ở các góc nhìn phụ và đảm bảo số liệu luôn nhất quán 100%.
 
 ---
 

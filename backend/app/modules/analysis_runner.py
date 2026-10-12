@@ -25,7 +25,7 @@ from .sandbox_executor import UnsafeCodeError
 logger = logging.getLogger(__name__)
 
 
-def _filter_by_time_range(
+def filter_by_time_range(
     df: pd.DataFrame,
     profile: DataProfile,
     time_start: str | None,
@@ -65,6 +65,10 @@ def _filter_by_time_range(
     except Exception as exc:
         logger.warning("Lỗi khi lọc thời gian: %s — dùng df gốc.", exc)
         return df
+
+
+# Alias tương thích ngược với các test và mã gọi cũ
+_filter_by_time_range = filter_by_time_range
 
 
 def run_task(

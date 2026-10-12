@@ -1,11 +1,44 @@
-.chart-panel { display: flex; flex-direction: column; gap: 20px; }
+.chart-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
 
-.chart-panel-title {
+.chart-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.section-title-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 1.1rem;
+}
+
+.chart-panel-title {
+  font-size: 1.15rem;
+  font-weight: 700;
   color: var(--text-primary);
+  margin: 0;
+}
+
+.section-desc {
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.supplementary-section {
+  padding-top: 16px;
+  border-top: 1px dashed var(--border-subtle);
 }
 
 .chart-grid {
@@ -18,9 +51,23 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.chart-card-header { display: flex; flex-direction: column; gap: 8px; }
+.card-supplementary {
+  background: hsla(220, 25%, 11%, 0.65);
+  border-color: hsla(271, 76%, 65%, 0.2);
+}
+
+.card-supplementary:hover {
+  border-color: hsla(271, 76%, 65%, 0.4);
+}
+
+.chart-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
 .chart-card-title-row {
   display: flex;
@@ -34,6 +81,14 @@
   font-weight: 600;
   color: var(--text-primary);
   line-height: 1.4;
+}
+
+.badge-ghost {
+  background: hsla(220, 15%, 50%, 0.15);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.72rem;
+  padding: 2px 6px;
 }
 
 .chart-container {
@@ -94,3 +149,27 @@
   border-radius: var(--radius-md);
 }
 .chart-highlight-note strong { color: var(--accent-danger); font-weight: 700; }
+
+/* Caption */
+.chart-caption {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  background: hsla(217, 91%, 60%, 0.06);
+  border: 1px solid hsla(217, 91%, 60%, 0.18);
+  border-radius: var(--radius-md);
+}
+.chart-caption-icon {
+  color: var(--accent-primary);
+  display: flex;
+  align-items: center;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.chart-caption-text {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.45;
+}

@@ -14,15 +14,33 @@ mở rộng từ ý tưởng SUMMARIZER / GOAL EXPLORER / VISGENERATOR của LID
 - [x] Thiết kế kiến trúc tổng thể (`docs/ARCHITECTURE.md`)
 - [x] Khởi tạo repo + CI cơ bản
 - [x] Bộ dữ liệu mẫu — **5 bộ** (`data/samples/`), gồm 2 bộ edge-case
-- [x] Module O1 — Data Profiler Stage 1 (rule-based, đã sửa 2 bug phát
-      hiện khi test với dữ liệu edge-case — xem CHANGELOG bên dưới)
-- [x] Module O1 — Data Profiler Stage 2 (làm giàu ngữ nghĩa bằng LLM,
-      tùy chọn, có test với client giả lập)
-- [x] Module O2 — Question Interpreter (prompt few-shot, grounding
-      check, toán ngày tháng tất định, 10 test với client giả lập)
-- [x] Module O3 — Code Generator + Sandbox Executor + Orchestrator (Tuần 4)
-- [ ] Module O4 — Chart Generator (Tuần 5)
-- [ ] Module O5 — Insight Generator (Tuần 6)
+- [x] Module O1 — Data Profiler (Stage 0, 1, 2)
+- [x] Module O2 — Question Interpreter
+- [x] Module O3 — Code Generator + Sandbox Executor + Orchestrator
+- [x] Module O4 — Chart Generator (5 loại biểu đồ, chart_hint)
+- [x] Module O5 — Insight Generator (trích xuất số liệu, đánh giá SEVQ)
+- [x] Frontend — Web UI React + Vite + Recharts
+- [x] **Dashboard đa góc nhìn (Perspective Planner):** Tự động bổ sung các biểu đồ phân rã tất định (xu hướng nhóm, tỷ trọng, biến động kỳ, đóng góp thay đổi...) kèm chú thích tự động không tốn thêm độ trễ LLM.
+
+### CHANGELOG — Dashboard đa góc nhìn (Perspective Planner)
+
+- **Kiến trúc Perspective Planner (`perspective_planner.py`):**
+  - Bổ sung lớp lập kế hoạch góc nhìn tất định giữa O3 và O4.
+  - Phân loại rõ ràng:
+    - *(A) Dẫn xuất:* `period_change` (Bar biến động % kỳ), `cumulative` (Area lũy kế), `moving_average` (Line MA3 làm mượt).
+    - *(B) Đồng hành:* `trend_by_group` (Line nhiều chuỗi theo nhóm, hỗ trợ tô đậm chuỗi mục tiêu `highlight_series`), `share_of_total` (Pie tỷ trọng theo nhóm), `contribution_to_change` (Bar đóng góp thay đổi kỳ cuối - kỳ đầu).
+  - Áp dụng các điều kiện có ý nghĩa (chỉ số cộng dồn được `_is_addable_metric`, giới hạn số nhóm 2–8, lọc dữ liệu âm) để loại bỏ biểu đồ vô nghĩa đối với các dataset như `ton_kho.csv` hay `danh_gia_khach_hang.csv`.
+  - Định dạng số kiểu Việt Nam (`_fmt_vn`) và tự động sinh caption nhận định tất định bám sát dữ liệu (không hallucination, không gọi LLM).
+  - Độ trễ bổ sung < 0.05s cho file dữ liệu mẫu, tuyệt đối không gọi thêm LLM API (đảm bảo NFR-01 ≤ 15s).
+- **Backend (`schemas.py`, `analysis_runner.py`, `main.py`):**
+  - Mở rộng `ChartSpec` với các trường tùy chọn: `role` ("primary" | "supplementary"), `perspective`, `caption`, `highlight_series`.
+  - Tách hàm `filter_by_time_range` thành hàm dùng chung để góc nhìn bổ sung có cùng cửa sổ thời gian với câu trả lời chính.
+  - Thêm tham số `expand_views: bool = Form(True)` vào endpoint `/analyze` và `/api/analyze`, bọc lỗi an toàn để lỗi góc nhìn bổ sung không bao giờ làm hỏng câu trả lời chính.
+- **Frontend (`ChartPanel.tsx`, `App.tsx`, `client.ts`):**
+  - Tách bố cục hiển thị thành 2 khu vực trực quan: **Biểu đồ trả lời chính** và **Góc nhìn bổ sung**.
+  - Bổ sung công tắc "Hiển thị thêm góc nhìn" trong form câu hỏi.
+  - Hỗ trợ biểu đồ nhiều đường với `highlight_series` (tô đậm đường chi nhánh mục tiêu, làm mờ các đường phụ) và hiển thị caption giải thích bên dưới card.
+- **Kiểm thử:** Bổ sung 17 test mới (`test_perspective_planner.py`) kiểm tra số liệu thực tế trên `doanh_thu.csv` và các trường hợp biên. Toàn bộ **151/151 tests pass 100%**.
 
 ### CHANGELOG Tuần 4
 

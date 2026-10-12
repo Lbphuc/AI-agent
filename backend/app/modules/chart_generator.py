@@ -126,7 +126,7 @@ def _build_chart(task: AnalysisTask, execution: ExecutionResult) -> ChartSpec | 
         )
         return None
 
-    x = list(data.keys())
+    x = [str(k) for k in data.keys()]
     chart_type = _pick_chart_type(task, x)  # Thay cho tra bang tat dinh cu
 
     # highlight_x: ten category can to noi bat (chi co o growth_rate)
@@ -137,11 +137,19 @@ def _build_chart(task: AnalysisTask, execution: ExecutionResult) -> ChartSpec | 
         if highlight_x is not None and not isinstance(highlight_x, str):
             highlight_x = str(highlight_x)
 
+    series_vals: list[float] = []
+    for v in data.values():
+        try:
+            val_float = float(v)
+            series_vals.append(0.0 if (val_float != val_float) else val_float)
+        except (ValueError, TypeError):
+            series_vals.append(0.0)
+
     return ChartSpec(
         chart_type=chart_type,
         title=_build_title(task),
         x=x,
-        series={task.metric: [float(v) for v in data.values()]},
+        series={task.metric: series_vals},
         highlight_x=highlight_x,
     )
 

@@ -136,6 +136,17 @@ class ExecutionResult(BaseModel):
 ChartType = Literal["line", "area", "bar", "bar_horizontal", "pie"]
 
 
+Perspective = Literal[
+    "primary",
+    "period_change",
+    "cumulative",
+    "moving_average",
+    "trend_by_group",
+    "share_of_total",
+    "contribution_to_change",
+]
+
+
 class ChartSpec(BaseModel):
     """Dac ta mot bieu do de frontend render (Plotly/Recharts/Chart.js).
 
@@ -149,6 +160,11 @@ class ChartSpec(BaseModel):
     x: list[str]
     series: dict[str, list[float]]  # {ten_chuoi: [gia_tri...]}
     highlight_x: Optional[str] = None  # category can to noi bat (neu co)
+    # --- Mo rong tu De xuat Dashboard da goc nhin (deu optional -> khong pha test cu) ---
+    role: Literal["primary", "supplementary"] = "primary"
+    perspective: Perspective = "primary"
+    caption: Optional[str] = None          # nhan xet ngan tat dinh
+    highlight_series: Optional[str] = None # to dam 1 DUONG trong chart nhieu chuoi
 
 
 class TaskResult(BaseModel):
