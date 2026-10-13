@@ -87,9 +87,10 @@ if _dist_assets.exists():
 # utf-8-sig: UTF-8 kem BOM (Excel Windows thuong xuat dinh dang nay).
 # cp1258: code page Viet Nam Windows, pho bien voi file CSV xuat tu
 #   phan mem ke toan/ERP noi dia.
+# windows-1252: Western European Windows / Excel CSV.
 # latin-1: fallback cuoi cung - doc duoc moi byte, nhung co the hien sai
 #   dau tieng Viet; doi voi file khong co dau, ket qua giong UTF-8.
-_CSV_ENCODINGS = ["utf-8-sig", "utf-8", "cp1258", "latin-1"]
+_CSV_ENCODINGS = ["utf-8-sig", "utf-8", "cp1258", "windows-1252", "latin-1"]
 
 
 def _read_excel(content: bytes, ext: str) -> pd.DataFrame:
@@ -185,6 +186,8 @@ async def _read_uploaded_file(file: UploadFile) -> pd.DataFrame:
             status_code=400,
             detail="File khong co du lieu (chi co header hoac toan o trong).",
         )
+    # Áp dụng làm sạch Stage 0 cho toàn bộ pipeline
+    df = data_profiler._clean(df)
     return df
 
 
