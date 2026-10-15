@@ -1,0 +1,505 @@
+{
+  "total_cases": 40,
+  "exact_match_accuracy_pct": 95.0,
+  "over_trigger_rate_pct": 0.0,
+  "metrics_per_level": {
+    "descriptive": {
+      "precision_pct": 100.0,
+      "recall_pct": 100.0,
+      "f1": 100.0
+    },
+    "diagnostic": {
+      "precision_pct": 92.9,
+      "recall_pct": 100.0,
+      "f1": 96.3
+    },
+    "forecast": {
+      "precision_pct": 92.3,
+      "recall_pct": 100.0,
+      "f1": 96.0
+    },
+    "prescriptive": {
+      "precision_pct": 100.0,
+      "recall_pct": 100.0,
+      "f1": 100.0
+    }
+  },
+  "details": [
+    {
+      "question": "Tổng doanh thu năm 2025 là bao nhiêu?",
+      "expected": [
+        "descriptive"
+      ],
+      "actual": [
+        "descriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Doanh thu tháng 12 năm 2024 đạt bao nhiêu triệu?",
+      "expected": [
+        "descriptive"
+      ],
+      "actual": [
+        "descriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "So sánh doanh thu giữa các chi nhánh trong năm qua?",
+      "expected": [
+        "descriptive"
+      ],
+      "actual": [
+        "descriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Chi nhánh nào có doanh thu cao nhất năm 2025?",
+      "expected": [
+        "descriptive"
+      ],
+      "actual": [
+        "descriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Số lượng sản phẩm bán ra theo từng tháng?",
+      "expected": [
+        "descriptive"
+      ],
+      "actual": [
+        "descriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Tỷ trọng đóng góp doanh thu của các danh mục sản phẩm?",
+      "expected": [
+        "descriptive"
+      ],
+      "actual": [
+        "descriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Doanh thu quý 3 năm 2024?",
+      "expected": [
+        "descriptive"
+      ],
+      "actual": [
+        "descriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Danh mục nào có số lượng bán nhiều nhất tại TP.HCM?",
+      "expected": [
+        "descriptive"
+      ],
+      "actual": [
+        "descriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Bảng số liệu tổng hợp doanh thu theo quý?",
+      "expected": [
+        "descriptive"
+      ],
+      "actual": [
+        "descriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Chi phí marketing trung bình mỗi tháng là bao nhiêu?",
+      "expected": [
+        "descriptive"
+      ],
+      "actual": [
+        "descriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Vì sao doanh thu Đà Nẵng lại sụt giảm mạnh?",
+      "expected": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "actual": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Yếu tố nào kéo giảm doanh thu của chi nhánh Đà Nẵng?",
+      "expected": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "actual": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Tại sao doanh thu quý 2 lại giảm so với quý 1?",
+      "expected": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "actual": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Nguyên nhân khiến doanh thu ngành hàng Điện tử giảm sút?",
+      "expected": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "actual": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Điều gì đóng góp lớn nhất vào mức tăng trưởng của TP.HCM?",
+      "expected": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "actual": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Do đâu mà chi phí marketing tăng nhưng doanh thu không tăng?",
+      "expected": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "actual": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Phân tích yếu tố ảnh hưởng đến sự thay đổi doanh thu chi nhánh?",
+      "expected": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "actual": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Lý do chi nhánh Hải Phòng tăng trưởng mạnh trong 6 tháng qua?",
+      "expected": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "actual": [
+        "descriptive",
+        "diagnostic"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Dự báo doanh thu 3 tháng tới sẽ ra sao?",
+      "expected": [
+        "descriptive",
+        "forecast"
+      ],
+      "actual": [
+        "descriptive",
+        "forecast"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Doanh thu quý tới dự kiến đạt bao nhiêu?",
+      "expected": [
+        "descriptive",
+        "forecast"
+      ],
+      "actual": [
+        "descriptive",
+        "forecast"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Ước tính xu hướng doanh thu trong thời gian tới?",
+      "expected": [
+        "descriptive",
+        "forecast"
+      ],
+      "actual": [
+        "descriptive",
+        "forecast"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Tháng tới chi nhánh TP.HCM dự kiến đạt bao nhiêu?",
+      "expected": [
+        "descriptive",
+        "forecast"
+      ],
+      "actual": [
+        "descriptive",
+        "forecast"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Dự đoán tình hình kinh doanh các tháng cuối năm?",
+      "expected": [
+        "descriptive",
+        "forecast"
+      ],
+      "actual": [
+        "descriptive",
+        "forecast"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Xu hướng bán hàng sắp tới có tiếp tục tăng không?",
+      "expected": [
+        "descriptive",
+        "forecast"
+      ],
+      "actual": [
+        "descriptive",
+        "forecast"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Dự báo số lượng bán ra trong quý 1 năm sau?",
+      "expected": [
+        "descriptive",
+        "forecast"
+      ],
+      "actual": [
+        "descriptive",
+        "forecast"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Ước tính doanh thu 6 tháng tới?",
+      "expected": [
+        "descriptive",
+        "forecast"
+      ],
+      "actual": [
+        "descriptive",
+        "forecast"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Nên ưu tiên chi nhánh nào để cải thiện doanh thu?",
+      "expected": [
+        "descriptive",
+        "prescriptive"
+      ],
+      "actual": [
+        "descriptive",
+        "prescriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Đề xuất giải pháp khắc phục tình trạng sụt giảm ở Đà Nẵng?",
+      "expected": [
+        "descriptive",
+        "prescriptive"
+      ],
+      "actual": [
+        "descriptive",
+        "diagnostic",
+        "prescriptive"
+      ],
+      "exact_match": false
+    },
+    {
+      "question": "Khuyến nghị phân bổ ngân sách marketing cho các chi nhánh?",
+      "expected": [
+        "descriptive",
+        "prescriptive"
+      ],
+      "actual": [
+        "descriptive",
+        "prescriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Nên làm gì để thúc đẩy doanh số ngành hàng Điện tử?",
+      "expected": [
+        "descriptive",
+        "prescriptive"
+      ],
+      "actual": [
+        "descriptive",
+        "prescriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Cần ưu tiên hành động chiến lược nào trong quý tới?",
+      "expected": [
+        "descriptive",
+        "prescriptive"
+      ],
+      "actual": [
+        "descriptive",
+        "forecast",
+        "prescriptive"
+      ],
+      "exact_match": false
+    },
+    {
+      "question": "Gợi ý hướng đi để tối ưu hóa chi phí và tăng trưởng?",
+      "expected": [
+        "descriptive",
+        "prescriptive"
+      ],
+      "actual": [
+        "descriptive",
+        "prescriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Đề xuất kế hoạch hành động cải thiện doanh số chi nhánh yếu?",
+      "expected": [
+        "descriptive",
+        "prescriptive"
+      ],
+      "actual": [
+        "descriptive",
+        "prescriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Chiến lược nào nên áp dụng cho thị trường miền Trung?",
+      "expected": [
+        "descriptive",
+        "prescriptive"
+      ],
+      "actual": [
+        "descriptive",
+        "prescriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Vì sao Đà Nẵng giảm và tháng tới dự kiến ra sao?",
+      "expected": [
+        "descriptive",
+        "diagnostic",
+        "forecast"
+      ],
+      "actual": [
+        "descriptive",
+        "diagnostic",
+        "forecast"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Nguyên nhân giảm doanh thu và nên làm gì để khắc phục?",
+      "expected": [
+        "descriptive",
+        "diagnostic",
+        "prescriptive"
+      ],
+      "actual": [
+        "descriptive",
+        "diagnostic",
+        "prescriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Dự báo doanh thu quý tới và đề xuất chiến lược tương ứng?",
+      "expected": [
+        "descriptive",
+        "forecast",
+        "prescriptive"
+      ],
+      "actual": [
+        "descriptive",
+        "forecast",
+        "prescriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Tại sao doanh số giảm, tương lai ra sao và cần hành động gì?",
+      "expected": [
+        "descriptive",
+        "diagnostic",
+        "forecast",
+        "prescriptive"
+      ],
+      "actual": [
+        "descriptive",
+        "diagnostic",
+        "forecast",
+        "prescriptive"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Phân tích nguyên nhân biến động và dự báo tháng sau?",
+      "expected": [
+        "descriptive",
+        "diagnostic",
+        "forecast"
+      ],
+      "actual": [
+        "descriptive",
+        "diagnostic",
+        "forecast"
+      ],
+      "exact_match": true
+    },
+    {
+      "question": "Vì sao marketing kém hiệu quả và khuyến nghị cải thiện?",
+      "expected": [
+        "descriptive",
+        "diagnostic",
+        "prescriptive"
+      ],
+      "actual": [
+        "descriptive",
+        "diagnostic",
+        "prescriptive"
+      ],
+      "exact_match": true
+    }
+  ]
+}

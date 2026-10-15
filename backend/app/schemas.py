@@ -58,6 +58,24 @@ class DataProfile(BaseModel):
     numeric_columns: list[str] = Field(default_factory=list)
     # --- Stage 2 (tuy chon, lam giau bang LLM) ---
     dataset_description: Optional[str] = None
+    # --- Thong tin chuoi thoi gian & kha nang dung cac che do phan tich ---
+    frequency: Optional[str] = None
+    n_periods: Optional[int] = None
+    availability: dict[str, ModeAvailability] = Field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Che do va Cap do phan tich (Phan tich sau 3 cap)
+# ---------------------------------------------------------------------------
+AnalysisLevel = Literal["descriptive", "diagnostic", "forecast", "prescriptive"]
+AnalysisMode = Literal["auto", "descriptive", "diagnostic", "forecast", "prescriptive"]
+
+
+class ModeAvailability(BaseModel):
+    """Kha nang su dung cua mot che do phan tich dua tren du lieu."""
+
+    available: bool
+    reason: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +125,7 @@ class AnalysisGoal(BaseModel):
     time_start: Optional[str] = None
     time_end: Optional[str] = None
     tasks: list[AnalysisTask]
+    levels: list[AnalysisLevel] = Field(default_factory=lambda: ["descriptive"])
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +180,7 @@ class ChartSpec(BaseModel):
     chart_type: ChartType
     title: str
     x: list[str]
-    series: dict[str, list[float]]  # {ten_chuoi: [gia_tri...]}
+    series: dict[str, list[Optional[float]]]  # {ten_chuoi: [gia_tri...]} - cho phep None cho du bao
     highlight_x: Optional[str] = None  # category can to noi bat (neu co)
     # --- Mo rong tu De xuat Dashboard da goc nhin (deu optional -> khong pha test cu) ---
     role: Literal["primary", "supplementary"] = "primary"
@@ -171,6 +190,9 @@ class ChartSpec(BaseModel):
     # --- Thong tin hien thi tieng Viet (Phan A6 de xuat) ---
     display_name: Optional[str] = None
     unit: Optional[str] = None
+    # --- Mo rong cho du bao (Forecast) ---
+    band: Optional[dict[str, list[Optional[float]]]] = None  # {"lower": [...], "upper": [...]}
+    forecast_from: Optional[str] = None  # nhan x noi bat dau du bao
 
 
 class TaskResult(BaseModel):
@@ -213,6 +235,7 @@ class ReportMeta(BaseModel):
     rows_used: int               # So dong thuc su duoc loc va su dung
     goal_summary: str            # Cau tom tat "He thong hieu cau hoi cua ban la..."
     notes: list[str] = Field(default_factory=list)  # Cac luu y tinh toan, fallback...
+    deepen: dict[str, ModeAvailability] = Field(default_factory=dict)  # Kha nang dung cac cap deepen
 
 
 # ---------------------------------------------------------------------------
@@ -244,3 +267,67 @@ class ExportXlsxRequest(BaseModel):
     filename: str = "data.csv"
     org_name: Optional[str] = None
     sections: ExportSections = Field(default_factory=ExportSections)
+
+
+# ---------------------------------------------------------------------------
+# Phan tich sau 3 cap (Diagnostic, Forecast, Prescriptive) & Mode Pills
+# ---------------------------------------------------------------------------
+class Fact(BaseModel):
+    """Mot su that so lieu duoc tinh tat dinh, co ID de LLM trich dan."""
+
+    id: str                                  # "F1", "F2"... on dinh trong 1 lan chay
+    kind: Literal["total", "contribution", "driver", "correlation", "forecast", "share"]
+    entity: Optional[str] = None             # ten nhom GIU NGUYEN nhu trong du lieu
+    metric: str                              # ten hien thi (Viet hoa)
+    value: float
+    unit: Optional[str] = None
+    period: Optional[str] = None
+    estimate: bool = False                   # True voi moi so du bao
+    text: str                                # cau mo ta tat dinh
+
+
+class Recommendation(BaseModel):
+    """Mot khuyen nghi hanh dong duoc kiem chung bang trich dan fact_ids."""
+
+    title: str
+    action: str
+    rationale: str
+    fact_ids: list[str]
+    priority: Literal["cao", "trung bình", "thấp"]
+    caveat: str                              # bat buoc: dieu can kiem chung
+
+
+class Notice(BaseModel):
+    """Thong bao ngu canh khi hop nhat mode va goal.levels."""
+
+    kind: Literal["added", "skipped", "info"]
+    level: Optional[AnalysisLevel] = None
+    message: str
+
+
+class Section(BaseModel):
+    """Mot phan ket qua cua mot cap phan tich."""
+
+    level: AnalysisLevel
+    charts: list[ChartSpec] = Field(default_factory=list)
+    narrative: Optional[InsightResult] = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class DeepenResponse(BaseModel):
+    """Phan hoi tu POST /deepen."""
+
+    level: AnalysisLevel                         # cap duoc yeu cau
+    sections: list[Section] = Field(default_factory=list)  # prescriptive: co the tra them diagnostic, forecast lam can cu
+    recommendations: list[Recommendation] = Field(default_factory=list)
+    facts: list[Fact] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class InterpretResponse(BaseModel):
+    """Phan hoi tu POST /interpret (O1 + O2 + resolve_levels)."""
+
+    goal: AnalysisGoal
+    levels: list[AnalysisLevel]        # SAU khi hop nhat mode + goal.levels + kha dung
+    notices: list[Notice] = Field(default_factory=list)
+    goal_summary: str                  # cau "He thong hieu cau hoi cua ban la..."

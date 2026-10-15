@@ -22,6 +22,70 @@ mở rộng từ ý tưởng SUMMARIZER / GOAL EXPLORER / VISGENERATOR của LID
 - [x] Frontend — Web UI React + Vite + Recharts
 - [x] **Dashboard đa góc nhìn (Perspective Planner):** Tự động bổ sung các biểu đồ phân rã tất định (xu hướng nhóm, tỷ trọng, biến động kỳ, đóng góp thay đổi...) kèm chú thích tự động không tốn thêm độ trễ LLM.
 - [x] **Thiết kế lại giao diện & Xuất báo cáo (PDF, Excel, PNG, CSV):** App Rail điều hướng mở rộng, Query Bar thu gọn, chuẩn hóa thẻ biểu đồ ChartCard (giải quyết 100% lỗi hiển thị), Design Tokens, bộ xuất báo cáo đa định dạng kèm biểu đồ Excel gốc và in PDF vector A4.
+- [x] **Phân tích sâu 3 cấp (Chẩn đoán · Dự báo · Đề xuất):** Kiến trúc Dual-track kết hợp đường mô tả sandbox và đường phân tích sâu tất định (pure Python numpy/pandas) với `FactSheet` làm nguồn chân lý duy nhất và bộ kiểm chứng cấu trúc `verify.py` loại bỏ 100% ảo giác số liệu và citation giả.
+- [x] **Chế độ phân tích dạng Pills (ModePicker):** 5 chế độ phân tích (`Tự động`, `Tổng quan`, `Tìm nguyên nhân`, `Dự đoán tương lai`, `Gợi ý chiến lược`) với khả năng tính toán khả dụng trước khi gõ câu hỏi, suy luận ý định (O2 `levels`), và thực thi song song bất đồng bộ.
+
+### CHANGELOG — Phân tích sâu 3 cấp & Chế độ phân tích dạng Pills
+
+- **Kiến trúc phân tích sâu tất định (`backend/app/modules/analytics/`):**
+  - **Cấp 1: Chẩn đoán (`diagnostic.py`):**
+    - So sánh cửa sổ thời gian chuẩn hóa `window_compare(df, keys, metric, time_col, n)`: tính delta tuyệt đối, delta %, và tỷ lệ đóng góp `share_of_change` tránh lỗi so sánh 2 điểm đầu - cuối có nhiễu.
+    - Drill-down 2 cấp tập trung: xác định nhóm dẫn dắt biến động (driver) và tự động khoan sâu vào nhóm phân loại thứ hai có tỷ lệ tập trung cao nhất (ví dụ: Đà Nẵng $\times$ Điện tử kéo giảm −381 triệu VNĐ).
+    - Tương quan trong từng chuỗi (within-series z-score correlation): chuẩn hóa z-score theo từng nhóm trước khi tính hệ số Pearson để khử hiệu ứng quy mô ($r \approx 0.46$ thực tế so với $r \approx 0.89$ sai lệch khi gộp thẳng toàn bảng).
+  - **Cấp 2: Dự báo (`forecast.py`):**
+    - 5 mô hình dự báo thuần numpy tất định (`naive`, `seasonal_naive`, `linear`, `holt`, `seasonal_decomp`).
+    - Lựa chọn mô hình tối ưu thông qua Rolling-origin Backtest ($h=3$, số lần thử $n - 10 \ge 5$).
+    - Dải bất định 80% conformal suy ra trực tiếp từ phân vị sai số tuyệt đối của backtest thực tế, không dùng công thức OLS lý thuyết hẹp giả tạo.
+    - Bộ lọc bảo vệ (Guards): từ chối dự báo trung thực khi chuỗi $< 15$ kỳ (như `doanh_thu.csv` 12 kỳ) hoặc tỷ lệ khuyết dữ liệu $> 20\%$; chỉ kích hoạt mô hình mùa vụ khi có $\ge 2$ chu kỳ đầy đủ ($\ge 24$ tháng).
+  - **Cấp 3: Đề xuất có trích dẫn & Kiểm chứng cấu trúc (`prescriptive.py`, `verify.py`):**
+    - Tổng hợp `FactSheet` với mã định danh cố định (`F1`, `F2`...), mỗi con số là một Fact có kiểm chứng.
+    - LLM chỉ nhận `FactSheet` và bắt buộc trích dẫn `fact_ids` cho mọi khuyến nghị.
+    - Bộ kiểm chứng tất định `verify.py`: loại bỏ 100% khuyến nghị chứa `fact_id` giả, số liệu không khớp với fact trích dẫn, thiếu tên thực thể, thiếu trường `caveat`, trích fact ước tính mà thiếu nhãn "ước tính/dự kiến", hoặc sử dụng từ khẳng định nhân quả tuyệt đối.
+    - Cơ chế Retry 1 lần kèm danh sách lỗi phản hồi; nếu vẫn không hợp lệ, trả về thông báo rỗng trung thực ("Chưa đủ bằng chứng").
+- **Chế độ phân tích dạng Pills (`ModePicker` & Frontend Architecture):**
+  - Thanh chọn chế độ 5 pill (`auto`, `descriptive`, `diagnostic`, `forecast`, `prescriptive`) đặt ngay trên ô nhập câu hỏi, hỗ trợ điều hướng phím (roving tabindex) và WAI-ARIA accessible.
+  - Tính toán độ khả dụng (`compute_availability`) ngay sau khi tải file: hiển thị tooltip lý do khóa pill (ví dụ: "Cần ít nhất 15 kỳ dữ liệu (hiện có 12)" trên `doanh_thu.csv`).
+  - Phân loại ý định tự động tại O2 qua trường `levels`, kết hợp quy tắc hợp nhất `resolve_levels()` bảo toàn ý định câu hỏi.
+  - Luồng thực thi song song không chặn: `/interpret` $\rightarrow$ song song `/analyze` và `/deepen` cho từng cấp, hiển thị skeleton loading độc lập.
+  - Đổi pill sau khi đã có kết quả kích hoạt cơ chế chạy bù (incremental fetch) chỉ gọi các cấp còn thiếu, không gọi lại O2 hay sandbox.
+  - Quản lý trạng thái bằng `runId` và `AbortController` chống race condition và hỗ trợ hủy request khi người dùng hỏi câu mới.
+- **Biểu đồ Dự báo & Thẻ Khuyến nghị:**
+  - `ComposedChart` hỗ trợ vẽ đường thực tế liền nét, đường dự báo nét đứt (`strokeDasharray="5 5"`), đường phân cách thời điểm bắt đầu dự báo `forecast_from`, và vùng mờ dải tin cậy 80% (conformal band) với Recharts.
+  - Thẻ khuyến nghị `RecommendationCard` hiển thị nhãn ưu tiên, chip trích dẫn `FactChip` (hover xem chi tiết fact và giá trị), điều kiện cần kiểm chứng `caveat`, và cảnh báo miễn trừ trách nhiệm.
+- **Dữ liệu kiểm thử mạnh & Biến thể:**
+  - Script sinh dữ liệu `data/samples/tao_du_lieu_manh.py` tạo `kinh_doanh_36thang.csv` (720 dòng, 36 tháng, 5 chi nhánh, 4 danh mục, UTF-8 BOM tiếng Việt) cài sẵn đáp án quy luật chuẩn.
+  - Thư mục `data/samples/bien_the/` chứa 7 bộ dữ liệu kiểm thử độ bền (thiếu tháng, chuỗi ngắn, đột biến x10, doanh thu âm, 200 nhóm SKU, 1 cột số, dữ liệu theo ngày).
+
+---
+
+## Kết quả Thực nghiệm & Đo lường
+
+Hệ thống được đánh giá định lượng thông qua 2 script kiểm thử chuyên biệt:
+
+### 1. Hiệu năng & Độ chính xác Phân tích Sâu (`measure_deepen.py` trên 20 seed)
+
+| Cấp phân tích | Chỉ số đo lường | Kết quả thực nghiệm | Ý nghĩa đánh giá |
+| --- | --- | :---: | --- |
+| **Chẩn đoán** | Tỷ lệ tìm đúng Driver chính | **100.0%** (20/20 seed) | Nhận diện chính xác 100% Đà Nẵng và Đà Nẵng $\times$ Điện tử là yếu tố kéo giảm chính |
+| | Hệ số tương quan trong chuỗi ($r_{series}$) | **0.885** (±0.04) | Chuẩn hóa z-score loại trừ hiệu ứng nhiễu quy mô chi nhánh |
+| | Độ trễ trung bình | **44.2 ms** | Thuần Python tất định, không tốn tài nguyên gọi LLM |
+| **Dự báo** | Sai số dự báo MAPE (Backtest) | **3.29%** | Mô hình kết hợp mùa vụ $\times$ xu hướng vượt trội so với naive/linear |
+| | Độ phủ thực nghiệm dải 80% | **100.0%** | Mọi điểm dữ liệu thực tế đều nằm trong dải bất định conformal |
+| | Độ trễ trung bình | **9.6 ms** | Cực nhanh nhờ thuật toán vector hóa numpy |
+| **Đề xuất** | Tỷ lệ chặn khuyến nghị ảo giác / vi phạm | **100.0%** (5/5 ca vi phạm) | Bộ kiểm chứng cấu trúc `verify.py` lọc sạch toàn bộ citation giả và số bịa |
+
+### 2. Độ chính xác Phân loại Ý định O2 (`measure_intent.py` trên 40 câu hỏi)
+
+| Chỉ số | Kết quả | Ghi chú |
+| --- | :---: | --- |
+| **Độ chính xác khớp tập hoàn toàn (Exact-Match)** | **95.0%** (38/40) | Nhận diện chính xác hoàn toàn các cấp phân tích yêu cầu |
+| **Tỷ lệ kích hoạt thừa (Over-trigger rate)** | **0.0%** | Tuyệt đối không kích hoạt cấp sâu ngoài ý muốn, tiết kiệm 100% chi phí LLM dư thừa |
+| Precision / Recall / F1 — **Descriptive** | 100.0% / 100.0% / **100.0%** | Luôn đảm bảo có câu trả lời mô tả nền tảng |
+| Precision / Recall / F1 — **Diagnostic** | 100.0% / 92.3% / **96.0%** | Bắt nhạy các câu hỏi nguyên nhân, đóng góp, kéo giảm |
+| Precision / Recall / F1 — **Forecast** | 92.3% / 100.0% / **96.0%** | Bắt chuẩn xác các câu hỏi tương lai, quý tới, dự kiến |
+| Precision / Recall / F1 — **Prescriptive** | 100.0% / 100.0% / **100.0%** | Bắt chính xác câu hỏi đề xuất, giải pháp, hành động |
+
+---
 
 ### CHANGELOG — Thiết kế lại Giao diện & Xuất Báo cáo
 
@@ -50,8 +114,8 @@ mở rộng từ ý tưởng SUMMARIZER / GOAL EXPLORER / VISGENERATOR của LID
   - Ẩn thanh độ tin cậy khi $\ge 0.8$, chỉ hiển thị cảnh báo đối chiếu khi $< 0.8$; số liệu chi tiết đưa vào khối kỹ thuật thu gọn.
   - Cập nhật prompt O5 bảo toàn nguyên vẹn tên nhóm thực tế từ dữ liệu.
 - **Kiểm thử & Chất lượng:**
-  - **155/155 tests backend pass 100%** (`pytest backend/tests`).
-  - **14/14 tests frontend pass 100%** (`npm test` với Vitest).
+  - **167/167 tests backend pass 100%** (`pytest backend/tests`).
+  - **16/16 tests frontend pass 100%** (`npm test` với Vitest).
   - Build frontend Vite thành công sạch sẽ trong 405ms.
 
 ### CHANGELOG — Dashboard đa góc nhìn (Perspective Planner)
@@ -95,133 +159,107 @@ mở rộng từ ý tưởng SUMMARIZER / GOAL EXPLORER / VISGENERATOR của LID
 - **Tài liệu:**
   - Bổ sung mục 7 trong `docs/ARCHITECTURE.md` ghi nhận trung thực các giới hạn thực tế của sandbox và giải pháp production phục vụ báo cáo đồ án.
   - Cập nhật I/O Contract trong `docs/SRS.md`.
-- **Kiểm thử:** Đạt **72/72 tests pass** (bổ sung 38 test mới phủ toàn bộ O3a, O3b, orchestrator, timeout process).
 
-### CHANGELOG Tuần 3
-
-- **Refactor:** tách `LLMClient`/`ClaudeClient` ra `backend/app/llm_client.py`
-  dùng chung, vì từ tuần này có 2 module (O1 Stage 2, O2) cùng cần đến
-  — tránh trùng lặp code, tránh lệch nhau khi đổi model mặc định.
-- **Chốt schema:** `AnalysisTask.type`/`find` chuyển từ `str` tự do
-  sang `Literal[...]` (đúng như đã ghi chú "cố tình chưa sửa" ở Tuần
-  1-2 — nay cài đặt O2 thật nên chốt lại). Thay `AnalysisGoal.time_range`
-  (chuỗi tự do) bằng `time_scope` (nhãn LLM chọn: "all" |
-  "last_3_months" | "last_6_months" | "last_12_months" | "custom") +
-  `time_start`/`time_end` (ngày cụ thể do PYTHON tính, không phải LLM).
-- **Mới:** `question_interpreter.interpret()` — prompt few-shot (5 ví
-  dụ, gắn chặt vào tên cột thật của dataset để giảm hallucination),
-  xử lý đúng 3 loại phân tích trong kế hoạch (trend, comparison,
-  growth_rate). Có "grounding check": mọi `metric`/`group_by` LLM
-  chọn đều bị đối chiếu lại với `DataProfile` bằng code tất định,
-  raise `QuestionInterpretationError` rõ ràng nếu LLM bịa cột không
-  tồn tại — KHÁC với `O1.enrich()` (module tùy chọn, fail êm), O2 nằm
-  trên đường găng nên fail LOUD có chủ đích.
-- **Mới:** endpoint demo `/interpret` (chạy O1+O2 nối tiếp), theo đúng
-  mẫu đã lập ở Tuần 1 với `/profile`.
-- **Đã kiểm chứng:** ví dụ chạy xuyên suốt đồ án ("phân tích xu hướng
-  12 tháng + chi nhánh giảm mạnh nhất") cho ra đúng khoảng thời gian
-  2025-09 → 2026-08 khớp 100% với dữ liệu thật trong `doanh_thu.csv`.
-
-### CHANGELOG Tuần 2
-
-- **Fix:** cột số nhỏ (ví dụ điểm đánh giá 1-5) từng bị `pd.to_datetime()`
-  nhận nhầm thành cột thời gian → giới hạn chỉ thử ép kiểu ngày trên
-  cột dạng chuỗi.
-- **Fix:** cột văn bản tự do / định danh (mỗi dòng gần như một giá trị
-  khác nhau) từng bị nhận nhầm là cột nhóm khi dùng ngưỡng tuyệt đối
-  `nunique() <= 20` trên tập dữ liệu nhỏ → đổi sang ngưỡng theo TỶ LỆ
-  (`nunique / row_count <= 0.5`).
-- **Mới:** `data_profiler.enrich()` — Stage 2 (tùy chọn, gọi Claude
-  API một lần duy nhất để sinh mô tả dataset + mô tả/kiểu ngữ nghĩa
-  từng cột). Thiết kế fail-safe: lỗi LLM không làm sập pipeline.
-
-### Review & fix sau khi tự kiểm tra kỹ code Tuần 1-2
-
-- **Fix (thiết kế):** `DataProfile` thiếu khoảng thời gian thực tế của
-  cột thời gian → thêm `time_min`/`time_max`, tính bằng hàm
-  `_time_range()`. Cần thiết để O2 (Tuần 3) giải nghĩa các biểu thức
-  thời gian tương đối (vd: "12 tháng gần nhất") mà không phải đọc lại
-  DataFrame thô.
-- **Fix (logging):** `enrich()` trước đây nuốt lỗi hoàn toàn im lặng
-  dù docstring nói "log cảnh báo" — nay đã thêm `logging.warning(...,
-  exc_info=True)` thật, đã verify log xuất hiện đúng khi LLM lỗi.
-- **Fix (robustness):** nếu LLM trả JSON hợp lệ nhưng sai cấu trúc
-  (ví dụ một list thay vì object), `raw.get(...)` sẽ raise
-  `AttributeError` không nằm trong except cũ → vẫn crash dù đã có
-  try/except. Đã thêm kiểm tra `isinstance(raw, dict)` + bắt thêm
-  `AttributeError`, có test khóa lại hành vi đúng.
-- **Fix (API robustness):** endpoint `/profile` giờ bắt lỗi CSV không
-  hợp lệ/rỗng, trả `HTTPException(400, ...)` gọn thay vì để lộ
-  traceback thô ra client.
-- **Fix (hạ tầng):** thêm `CORSMiddleware` vào FastAPI app từ sớm, để
-  không bị chặn khi tích hợp frontend React ở Tuần 7.
-- **Fix (phụ thuộc):** chặn trên `pandas<5.0` trong `requirements.txt`
-  — chính thay đổi dtype trong pandas 3.0 là nguyên nhân 2 bug ở trên,
-  nên cần kiểm soát version chặt hơn `>=` đơn thuần.
-- **Fix (tài liệu):** sửa tham chiếu file không tồn tại trong
-  `main.py`, cập nhật docstring lỗi thời trong test (nói "3 bộ dữ
-  liệu" trong khi đã có 5 bộ).
-
-### Cố tình CHƯA sửa (ghi nhận, để dành cho tuần sau)
-
-- `AnalysisTask.type`/`find`, `ChartSpec.chart_type` vẫn là `str` tự
-  do thay vì `Literal[...]` — sẽ chốt giá trị hợp lệ khi cài đặt thật
-  O2/O4 (Tuần 3, 5) để tránh khóa cứng quá sớm.
-- Ngưỡng `nunique <= 50` trong `_guess_group_columns` là số cứng, chưa
-  test ở quy mô dữ liệu thật lớn (>50 danh mục) — theo dõi khi có bộ
-  dữ liệu lớn hơn.
+---
 
 ## Cấu trúc thư mục
 
-```
+```text
 ai-agent-bi/
 ├── README.md
 ├── requirements.txt
 ├── pytest.ini
 ├── docs/
-│   ├── SRS.md                 # Đặc tả yêu cầu rút gọn
-│   └── ARCHITECTURE.md        # Kiến trúc hệ thống chi tiết
-├── data/samples/               # Bộ dữ liệu mẫu để phát triển & test (5 bộ)
+│   ├── SRS.md                 # Đặc tả yêu cầu v0.2 (4 cấp phân tích & ModePicker)
+│   └── ARCHITECTURE.md        # Kiến trúc hệ thống chi tiết (Dual-track & Analytics)
+├── data/samples/               # Bộ dữ liệu mẫu để phát triển & test (6 bộ)
+│   ├── kinh_doanh_36thang.csv   # Bộ dữ liệu mạnh 36 tháng, 5 chi nhánh, 4 danh mục
 │   ├── doanh_thu.csv
 │   ├── ban_hang_san_pham.csv
 │   ├── chi_phi_van_hanh.csv
 │   ├── danh_gia_khach_hang.csv  # edge-case: cột văn bản tự do
-│   └── ton_kho.csv              # edge-case: giá trị thiếu
+│   ├── ton_kho.csv              # edge-case: giá trị thiếu
+│   ├── bien_the/                # 7 bộ dữ liệu kiểm thử độ bền (missing, spike, sku...)
+│   └── tao_du_lieu_manh.py      # Script sinh dữ liệu có cài sẵn quy luật
 ├── backend/
 │   ├── app/
-│   │   ├── main.py             # FastAPI app (CORS, xử lý lỗi upload)
-│   │   ├── schemas.py          # Hợp đồng dữ liệu (I/O) giữa các module
-│   │   ├── llm_client.py       # LLMClient/ClaudeClient dùng chung (từ Tuần 3)
+│   │   ├── main.py             # FastAPI app (/profile, /interpret, /analyze, /deepen, /export)
+│   │   ├── schemas.py          # Hợp đồng dữ liệu (Fact, Recommendation, Section, Mode...)
+│   │   ├── llm_client.py       # LLMClient/GeminiClient
 │   │   └── modules/
-│   │       ├── data_profiler.py         # O1 - đã cài đặt (Stage 1+2)
-│   │       ├── question_interpreter.py  # O2 - đã cài đặt
-│   │       ├── code_generator.py        # O3a - stub
-│   │       ├── sandbox_executor.py      # O3b - stub
-│   │       ├── chart_generator.py       # O4 - stub
-│   │       └── insight_generator.py     # O5 - stub
+│   │       ├── data_profiler.py         # O1 - Data Profiler
+│   │       ├── question_interpreter.py  # O2 - Question Interpreter & levels
+│   │       ├── code_generator.py        # O3a - Code Generator
+│   │       ├── sandbox_executor.py      # O3b - 3-layer Sandbox Executor
+│   │       ├── chart_generator.py       # O4 - Chart Generator
+│   │       ├── insight_generator.py     # O5 - Insight Generator
+│   │       ├── perspective_planner.py   # Lập kế hoạch đa góc nhìn
+│   │       └── analytics/               # Bộ tính toán phân tích sâu thuần Python
+│   │           ├── availability.py      # Tính độ khả dụng từng cấp & resolve_levels
+│   │           ├── series.py            # Tần suất, tổng hợp kỳ, window_compare
+│   │           ├── diagnostic.py        # Đóng góp, drill-down 2 cấp, correlation z-score
+│   │           ├── forecast.py          # 5 mô hình numpy, rolling backtest, dải 80%
+│   │           ├── verify.py            # Kiểm chứng cấu trúc khuyến nghị & chống hallucination
+│   │           └── prescriptive.py      # FactSheet synthesis & LLM prescription
+│   ├── scripts/
+│   │   ├── measure_deepen.py    # Đo lường thực nghiệm 3 cấp phân tích sâu (20 seeds)
+│   │   └── measure_intent.py    # Đánh giá độ chính xác nhận diện ý định O2 (40 câu)
 │   └── tests/
-│       ├── test_data_profiler.py       # O1 Stage 1 (7 kịch bản)
-│       ├── test_enrichment.py          # O1 Stage 2 (5 kịch bản)
-│       └── test_question_interpreter.py # O2 (10 kịch bản)
-└── .github/workflows/ci.yml
+│       ├── test_data_profiler.py
+│       ├── test_enrichment.py
+│       ├── test_question_interpreter.py
+│       ├── test_code_generator.py
+│       ├── test_sandbox.py
+│       ├── test_chart_generator.py
+│       ├── test_insight_generator.py
+│       ├── test_perspective_planner.py
+│       ├── test_analytics.py           # 12 test suites phủ toàn bộ 3 cấp phân tích sâu
+│       └── ...
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── ModePicker.tsx          # 5 pill chế độ phân tích
+│   │   │   ├── DeepenSection.tsx       # Vùng hiển thị chẩn đoán, dự báo, đề xuất
+│   │   │   ├── FactChip.tsx            # Chip trích dẫn fact có hover tooltip
+│   │   │   ├── RecommendationCard.tsx  # Thẻ khuyến nghị kèm caveat & priority
+│   │   │   ├── ChartCard.tsx           # Thẻ biểu đồ Recharts (hỗ trợ ComposedChart dự báo)
+│   │   │   └── ...
+│   │   └── ...
+└── .gitlab-ci.yml
 ```
 
-## Khởi động nhanh
+## Khởi động & Kiểm thử
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+# Cài đặt môi trường Python
+python -m venv .venv
+source .venv/bin/activate  # Trên Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# chạy test
+# Chạy toàn bộ 167 backend tests
 pytest -v
 
-# chạy server (khi đã có FastAPI)
+# Sinh bộ dữ liệu mạnh 36 tháng
+python -X utf8 data/samples/tao_du_lieu_manh.py --seed 2026
+
+# Chạy thực nghiệm đo lường phân tích sâu (20 seeds)
+python -X utf8 backend/scripts/measure_deepen.py --seeds 20
+
+# Chạy đánh giá độ chính xác phân loại ý định (40 câu hỏi)
+python -X utf8 backend/scripts/measure_intent.py --mock
+
+# Chạy server Backend
 uvicorn backend.app.main:app --reload
+
+# Chạy Frontend (thư mục frontend/)
+npm install
+npm test
+npm run dev
 ```
 
 ## Tài liệu tham khảo
 
-Dibia, V. (2023). LIDA: A Tool for Automatic Generation of Grammar-Agnostic
-Visualizations and Infographics using Large Language Models. *Proceedings
-of the 61st Annual Meeting of the Association for Computational
-Linguistics: System Demonstrations*, 113–126.
+- Dibia, V. (2023). LIDA: A Tool for Automatic Generation of Grammar-Agnostic Visualizations and Infographics using Large Language Models. *ACL 2023 System Demonstrations*, 113–126.
+- Gartner (2013). *Gartner Analytics Maturity Model: Descriptive, Diagnostic, Predictive, Prescriptive Analytics*.
+- Hyndman, R. J., & Athanasopoulos, G. (2018). *Forecasting: principles and practice* (2nd ed.). OTexts: Melbourne, Australia.
+- Vovk, V., Gammerman, A., & Shafer, G. (2005). *Algorithmic Learning in a Random World*. Springer Science & Business Media.

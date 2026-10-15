@@ -53,13 +53,15 @@ export function buildReportModel(
       const rowVal: (string | number)[] = [chart.x[r]];
       for (const k of seriesKeys) {
         const val = chart.series[k]?.[r];
-        rowVal.push(val !== undefined ? val : "—");
+        rowVal.push(val !== undefined && val !== null ? val : "—");
       }
       rows.push(rowVal);
     }
 
     let calculationNote = "";
-    if (chart.perspective === "share_of_total") {
+    if (chart.forecast_from || chart.band) {
+      calculationNote = "Ước tính dự báo chuỗi thời gian dựa trên mô hình định lượng và backtest.";
+    } else if (chart.perspective === "share_of_total") {
       calculationNote = "Tỷ trọng (%) = (Giá trị từng nhóm / Tổng các nhóm) × 100.";
     } else if (chart.perspective === "period_change") {
       calculationNote = "% Thay đổi = ((Giá trị kỳ này − Giá trị kỳ trước) / Giá trị kỳ trước) × 100.";

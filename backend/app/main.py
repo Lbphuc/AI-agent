@@ -10,7 +10,9 @@ xem kế hoạch chi tiết tại docs/SRS.md (mục 3) và docs/ARCHITECTURE.md
 from __future__ import annotations
 
 import io
+import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
@@ -31,6 +33,7 @@ from starlette.concurrency import run_in_threadpool
 from .llm_client import GeminiClient
 from .modules import (
     analysis_runner,
+    analytics,
     chart_generator,
     data_profiler,
     excel_exporter,
@@ -41,15 +44,26 @@ from .modules import (
 from .modules.business_terms import resolve_column_display
 from .schemas import (
     AnalysisGoal,
+    AnalysisLevel,
+    AnalysisMode,
     AnalyzeResponse,
     ChartSpec,
     DataProfile,
+    DeepenResponse,
     ExportXlsxRequest,
+    InterpretResponse,
+    ModeAvailability,
     ReportMeta,
     TaskResult,
 )
 
 logger = logging.getLogger(__name__)
+
+FEATURE_DEEPEN: set[str] = {
+    s.strip()
+    for s in os.environ.get("FEATURE_DEEPEN", "diagnostic,forecast,prescriptive").split(",")
+    if s.strip()
+}
 
 app = FastAPI(
     title="AI Agent Phan Tich Du Lieu Kinh Doanh",
@@ -258,7 +272,12 @@ async def profile_csv(file: UploadFile = File(...)) -> DataProfile:
     (O2-O5) san sang.
     """
     df = await _read_uploaded_file(file)
-    return data_profiler.profile(df)
+    profile = await run_in_threadpool(data_profiler.profile, df)
+    avail, freq, n_per = analytics.compute_availability(df, profile)
+    profile.availability = avail
+    profile.frequency = freq
+    profile.n_periods = n_per
+    return profile
 
 
 @app.post("/profile-many")
@@ -280,33 +299,33 @@ async def profile_many(files: list[UploadFile] = File(...)) -> dict[str, DataPro
     result: dict[str, DataProfile] = {}
     for f in files:
         df = await _read_uploaded_file(f)
-        result[f.filename or "unnamed"] = data_profiler.profile(df)
+        prof = data_profiler.profile(df)
+        avail, freq, n_per = analytics.compute_availability(df, prof)
+        prof.availability = avail
+        prof.frequency = freq
+        prof.n_periods = n_per
+        result[f.filename or "unnamed"] = prof
     return result
 
 
-@app.post("/interpret", response_model=AnalysisGoal)
-@app.post("/api/interpret", response_model=AnalysisGoal, include_in_schema=False)
+@app.post("/interpret", response_model=InterpretResponse)
+@app.post("/api/interpret", response_model=InterpretResponse, include_in_schema=False)
 async def interpret_question(
-    file: UploadFile = File(...), question: str = Form(...)
-) -> AnalysisGoal:
-    """Endpoint Tuan 3: chay O1 + O2 (chua chay O3-O5).
-
-    Dung de kiem thu/demo viec phan ra cau hoi thanh muc tieu phan
-    tich co cau truc, truoc khi O3 (sinh + thuc thi ma) san sang o
-    Tuan 4.
-
-    LLM: GeminiClient (doc API key tu bien moi truong GEMINI_API_KEY
-    hoac file .env — xem backend/app/llm_client.py).
-
-    Raises:
-        HTTPException(422): cau hoi khong hieu duoc / tham chieu cot
-            khong ton tai — xem question_interpreter.QuestionInterpretationError.
-    """
+    file: UploadFile = File(...),
+    question: str = Form(...),
+    mode: AnalysisMode = Form("auto"),
+) -> InterpretResponse:
+    """Endpoint Tuan 3 + Mode Pills: chay O1 + O2 va hop nhat levels theo che do phan tich."""
     df = await _read_uploaded_file(file)
     profile = await run_in_threadpool(data_profiler.profile, df)
+    avail, freq, n_per = analytics.compute_availability(df, profile)
+    profile.availability = avail
+    profile.frequency = freq
+    profile.n_periods = n_per
+
     try:
         llm = GeminiClient()
-        return await run_in_threadpool(
+        goal = await run_in_threadpool(
             question_interpreter.interpret, question, profile, llm
         )
     except question_interpreter.QuestionInterpretationError as exc:
@@ -328,6 +347,16 @@ async def interpret_question(
                 "chi nhánh/cột dữ liệu bạn muốn phân tích."
             ),
         ) from exc
+
+    final_levels, notices = analytics.resolve_levels(mode, goal.levels, avail)
+    goal_summary = _generate_goal_summary(goal)
+
+    return InterpretResponse(
+        goal=goal,
+        levels=final_levels,
+        notices=notices,
+        goal_summary=goal_summary,
+    )
 
 
 @app.post("/chart-preview", response_model=list[ChartSpec])
@@ -365,16 +394,12 @@ async def analyze(
     file: UploadFile = File(...),
     question: str = Form(...),
     expand_views: bool = Form(True),
+    goal: str | None = Form(None),
 ) -> AnalyzeResponse:
     """Endpoint chinh cua he thong (FR-01 den FR-09) — Pipeline end-to-end.
 
-    Tuan 6: hoan chinh O1 -> O2 -> O3 -> O4 -> O5.
-    Tra AnalyzeResponse day du (goal, task_results, charts, insight).
-
-    Xu ly loi tung phan (partial failure):
-    - 1 task O3 loi: task do bi bo qua, cac task khac van chay.
-    - Insight loi (InsightGenerationError): van tra charts, insight=None.
-    - Ca charts lan insight deu rong: 422 (khong co gi tra ve).
+    Nhan them goal tuy chon: neu client da co goal tu /interpret thi kiem tra lai
+    va bo qua O2, giam 1 lan goi LLM va do tre.
     """
     df = await _read_uploaded_file(file)
     profile = await run_in_threadpool(data_profiler.profile, df)
@@ -388,29 +413,43 @@ async def analyze(
 
     llm = GeminiClient()
 
-    try:
-        goal = await run_in_threadpool(
-            question_interpreter.interpret, question, profile, llm
-        )
-    except question_interpreter.QuestionInterpretationError as exc:
-        err_msg = str(exc)
-        if any(w in err_msg.lower() for w in ("503", "unavailable", "llm api", "429", "resource_exhausted", "quota")):
+    # Neu goal duoc truyen vao -> validate lai voi profile (khong tin tuong mu quang)
+    if goal:
+        try:
+            goal_dict = json.loads(goal) if isinstance(goal, str) else goal
+            analysis_goal = question_interpreter.revalidate_goal(goal_dict, profile)
+        except Exception as exc:
             raise HTTPException(
-                status_code=503,
-                detail=(
-                    f"Dịch vụ AI đang quá tải hoặc tạm thời hết quota: {err_msg}. "
-                    "Vui lòng thử lại sau vài giây."
-                ),
+                status_code=422,
+                detail=f"Mục tiêu phân tích (goal) không hợp lệ hoặc tham chiếu cột lạ: {exc}",
             ) from exc
-        raise HTTPException(
-            status_code=422, detail=f"Không hiểu được câu hỏi: {exc}"
-        ) from exc
+    else:
+        try:
+            analysis_goal = await run_in_threadpool(
+                question_interpreter.interpret, question, profile, llm
+            )
+        except question_interpreter.QuestionInterpretationError as exc:
+            err_msg = str(exc)
+            if any(w in err_msg.lower() for w in ("503", "unavailable", "llm api", "429", "resource_exhausted", "quota")):
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        f"Dịch vụ AI đang quá tải hoặc tạm thời hết quota: {err_msg}. "
+                        "Vui lòng thử lại sau vài giây."
+                    ),
+                ) from exc
+            raise HTTPException(
+                status_code=422, detail=f"Không hiểu được câu hỏi: {exc}"
+            ) from exc
+
+    print(f"\n🚀 [1/3] Bắt đầu phân tích: \"{question}\" | Số tác vụ: {len(analysis_goal.tasks)}", flush=True)
 
     # O3: chay tung task, loi tung phan khong chan nhau
     task_results: list[TaskResult] = []
-    for task in goal.tasks:
+    for idx, task in enumerate(analysis_goal.tasks, start=1):
+        print(f"⚙️ [2/3] O3: Đang sinh mã và chạy sandbox cho task {idx}/{len(analysis_goal.tasks)} ({task.type})...", flush=True)
         exec_result = await run_in_threadpool(
-            analysis_runner.run_task, task, goal, profile, df, llm
+            analysis_runner.run_task, task, analysis_goal, profile, df, llm
         )
         task_results.append(TaskResult(task=task, execution=exec_result))
 
@@ -422,11 +461,11 @@ async def analyze(
     if expand_views:
         try:
             df_filtered = analysis_runner.filter_by_time_range(
-                df, profile, goal.time_start, goal.time_end
+                df, profile, analysis_goal.time_start, analysis_goal.time_end
             )
             supplementary_charts = await run_in_threadpool(
                 perspective_planner.expand,
-                goal,
+                analysis_goal,
                 profile,
                 df_filtered,
                 task_results,
@@ -435,6 +474,7 @@ async def analyze(
             logger.warning("Loi khi sinh goc nhin bo sung: %s", exc)
 
     charts = primary_charts + supplementary_charts
+    print(f"📊 [3/3] O4: Đã tạo {len(charts)} biểu đồ. Đang viết nhận xét AI (O5)...", flush=True)
 
     # O5: sinh insight (goi LLM), loi khong chan toan bo response
     insight_result = None
@@ -446,6 +486,8 @@ async def analyze(
         logger.warning("Khong sinh duoc insight: %s", exc)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Loi bat ngo khi sinh insight: %s", exc)
+
+    print("✅ Hoàn tất toàn bộ pipeline mô tả (/analyze)", flush=True)
 
     # Neu ca charts lan insight deu rong -> khong co gi tra ve -> 422
     if not charts and insight_result is None:
@@ -459,22 +501,107 @@ async def analyze(
 
     rows_total = len(df)
     rows_used = len(df_filtered) if "df_filtered" in locals() and df_filtered is not None else rows_total
+
+    avail_map, _, _ = analytics.compute_availability(df, profile)
+
     report_meta = ReportMeta(
         generated_at=datetime.now(timezone.utc).isoformat(),
         model_name=getattr(llm, "model_name", "AI Model"),
         rows_total=rows_total,
         rows_used=rows_used,
-        goal_summary=_generate_goal_summary(goal),
+        goal_summary=_generate_goal_summary(analysis_goal),
         notes=[],
+        deepen=avail_map,
     )
 
     return AnalyzeResponse(
-        goal=goal,
+        goal=analysis_goal,
         task_results=task_results,
         charts=charts,
         insight=insight_result,
         meta=report_meta,
     )
+
+
+@app.post("/deepen", response_model=DeepenResponse)
+@app.post("/api/deepen", response_model=DeepenResponse, include_in_schema=False)
+async def deepen_analysis(
+    file: UploadFile = File(...),
+    goal: str = Form(...),
+    level: AnalysisLevel = Form(...),
+) -> DeepenResponse:
+    """Endpoint chay phan tich sau theo tung cap: diagnostic | forecast | prescriptive.
+
+    Thuan Python tat dinh, tinh toan nhanh, LLM chi dien giai tren FactSheet.
+    """
+    df = await _read_uploaded_file(file)
+    profile = await run_in_threadpool(data_profiler.profile, df)
+
+    try:
+        goal_dict = json.loads(goal) if isinstance(goal, str) else goal
+        validated_goal = question_interpreter.revalidate_goal(goal_dict, profile)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Mục tiêu phân tích (goal) không hợp lệ hoặc tham chiếu cột lạ: {exc}",
+        ) from exc
+
+    if level not in FEATURE_DEEPEN:
+        return DeepenResponse(
+            level=level,
+            sections=[],
+            warnings=[f"Cấp phân tích '{level}' đang tạm thời bị vô hiệu hóa."],
+        )
+
+    avail_map, _, _ = analytics.compute_availability(df, profile)
+    if not avail_map.get(level, ModeAvailability(available=False)).available:
+        reason = avail_map.get(level).reason if avail_map.get(level) else "Dữ liệu chưa đủ điều kiện."
+        return DeepenResponse(
+            level=level,
+            sections=[],
+            warnings=[reason],
+        )
+
+    print(f"📈 [DEEPEN] Đang tính toán chuyên sâu cấp: {level.upper()}...", flush=True)
+    llm = GeminiClient()
+    try:
+        if level == "diagnostic":
+            section, facts = await run_in_threadpool(
+                analytics.run_diagnostic, df, profile, validated_goal, llm
+            )
+            print("✅ [DEEPEN] Hoàn tất chẩn đoán (Diagnostic)", flush=True)
+            return DeepenResponse(
+                level="diagnostic",
+                sections=[section],
+                facts=facts,
+                warnings=section.warnings,
+            )
+        elif level == "forecast":
+            section, facts = await run_in_threadpool(
+                analytics.run_forecast, df, profile, validated_goal, 3, llm
+            )
+            print("✅ [DEEPEN] Hoàn tất dự báo (Forecast)", flush=True)
+            return DeepenResponse(
+                level="forecast",
+                sections=[section],
+                facts=facts,
+                warnings=section.warnings,
+            )
+        elif level == "prescriptive":
+            resp = await run_in_threadpool(
+                analytics.run_prescriptive, df, profile, validated_goal, llm
+            )
+            print("✅ [DEEPEN] Hoàn tất đề xuất (Prescriptive)", flush=True)
+            return resp
+        else:
+            raise HTTPException(status_code=400, detail=f"Cấp phân tích không hỗ trợ: {level}")
+    except Exception as exc:
+        logger.exception("Lỗi khi chạy deepen level=%s: %s", level, exc)
+        return DeepenResponse(
+            level=level,
+            sections=[],
+            warnings=[f"Đã xảy ra lỗi khi phân tích ({type(exc).__name__}): {exc}"],
+        )
 
 
 def _generate_goal_summary(goal: AnalysisGoal) -> str:

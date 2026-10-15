@@ -1,0 +1,721 @@
+﻿Thang,Chi_nhanh,Danh_muc,Doanh_thu_trieu_vnd
+2023-01,TP.HCM,Điện tử,202.9
+2023-01,TP.HCM,Thời trang,161.2
+2023-01,TP.HCM,Gia dụng,130.0
+2023-01,TP.HCM,Thực phẩm,110.1
+2023-01,Hà Nội,Điện tử,139.4
+2023-01,Hà Nội,Thời trang,93.0
+2023-01,Hà Nội,Gia dụng,76.5
+2023-01,Hà Nội,Thực phẩm,74.5
+2023-01,Đà Nẵng,Điện tử,107.7
+2023-01,Đà Nẵng,Thời trang,62.4
+2023-01,Đà Nẵng,Gia dụng,59.1
+2023-01,Đà Nẵng,Thực phẩm,46.1
+2023-01,Hải Phòng,Điện tử,63.2
+2023-01,Hải Phòng,Thời trang,57.4
+2023-01,Hải Phòng,Gia dụng,50.2
+2023-01,Hải Phòng,Thực phẩm,58.2
+2023-01,Cần Thơ,Điện tử,88.6
+2023-01,Cần Thơ,Thời trang,33.4
+2023-01,Cần Thơ,Gia dụng,26.5
+2023-01,Cần Thơ,Thực phẩm,36.2
+2023-02,TP.HCM,Điện tử,162.6
+2023-02,TP.HCM,Thời trang,98.3
+2023-02,TP.HCM,Gia dụng,103.5
+2023-02,TP.HCM,Thực phẩm,72.9
+2023-02,Hà Nội,Điện tử,90.5
+2023-02,Hà Nội,Thời trang,82.0
+2023-02,Hà Nội,Gia dụng,61.3
+2023-02,Hà Nội,Thực phẩm,66.3
+2023-02,Đà Nẵng,Điện tử,72.0
+2023-02,Đà Nẵng,Thời trang,35.3
+2023-02,Đà Nẵng,Gia dụng,42.8
+2023-02,Đà Nẵng,Thực phẩm,13.8
+2023-02,Hải Phòng,Điện tử,70.7
+2023-02,Hải Phòng,Thời trang,31.5
+2023-02,Hải Phòng,Gia dụng,21.0
+2023-02,Hải Phòng,Thực phẩm,36.4
+2023-02,Cần Thơ,Điện tử,39.8
+2023-02,Cần Thơ,Thời trang,26.5
+2023-02,Cần Thơ,Gia dụng,18.2
+2023-02,Cần Thơ,Thực phẩm,20.4
+2023-03,TP.HCM,Điện tử,201.5
+2023-03,TP.HCM,Thời trang,128.6
+2023-03,TP.HCM,Gia dụng,136.4
+2023-03,TP.HCM,Thực phẩm,106.8
+2023-03,Hà Nội,Điện tử,108.8
+2023-03,Hà Nội,Thời trang,80.3
+2023-03,Hà Nội,Gia dụng,102.1
+2023-03,Hà Nội,Thực phẩm,63.5
+2023-03,Đà Nẵng,Điện tử,85.3
+2023-03,Đà Nẵng,Thời trang,81.7
+2023-03,Đà Nẵng,Gia dụng,53.3
+2023-03,Đà Nẵng,Thực phẩm,40.3
+2023-03,Hải Phòng,Điện tử,59.4
+2023-03,Hải Phòng,Thời trang,36.2
+2023-03,Hải Phòng,Gia dụng,68.5
+2023-03,Hải Phòng,Thực phẩm,48.9
+2023-03,Cần Thơ,Điện tử,54.7
+2023-03,Cần Thơ,Thời trang,43.1
+2023-03,Cần Thơ,Gia dụng,33.4
+2023-03,Cần Thơ,Thực phẩm,22.4
+2023-04,TP.HCM,Điện tử,213.7
+2023-04,TP.HCM,Thời trang,154.0
+2023-04,TP.HCM,Gia dụng,138.0
+2023-04,TP.HCM,Thực phẩm,70.4
+2023-04,Hà Nội,Điện tử,132.8
+2023-04,Hà Nội,Thời trang,99.7
+2023-04,Hà Nội,Gia dụng,78.4
+2023-04,Hà Nội,Thực phẩm,71.5
+2023-04,Đà Nẵng,Điện tử,87.0
+2023-04,Đà Nẵng,Thời trang,62.9
+2023-04,Đà Nẵng,Gia dụng,58.8
+2023-04,Đà Nẵng,Thực phẩm,53.3
+2023-04,Hải Phòng,Điện tử,68.5
+2023-04,Hải Phòng,Thời trang,31.7
+2023-04,Hải Phòng,Gia dụng,27.6
+2023-04,Hải Phòng,Thực phẩm,34.2
+2023-04,Cần Thơ,Điện tử,34.5
+2023-04,Cần Thơ,Thời trang,29.3
+2023-04,Cần Thơ,Gia dụng,50.0
+2023-04,Cần Thơ,Thực phẩm,20.7
+2023-05,TP.HCM,Điện tử,221.9
+2023-05,TP.HCM,Thời trang,155.7
+2023-05,TP.HCM,Gia dụng,125.3
+2023-05,TP.HCM,Thực phẩm,94.1
+2023-05,Hà Nội,Điện tử,143.0
+2023-05,Hà Nội,Thời trang,99.7
+2023-05,Hà Nội,Gia dụng,109.6
+2023-05,Hà Nội,Thực phẩm,62.1
+2023-05,Đà Nẵng,Điện tử,80.6
+2023-05,Đà Nẵng,Thời trang,41.1
+2023-05,Đà Nẵng,Gia dụng,56.0
+2023-05,Đà Nẵng,Thực phẩm,51.9
+2023-05,Hải Phòng,Điện tử,64.0
+2023-05,Hải Phòng,Thời trang,47.2
+2023-05,Hải Phòng,Gia dụng,53.0
+2023-05,Hải Phòng,Thực phẩm,45.3
+2023-05,Cần Thơ,Điện tử,47.5
+2023-05,Cần Thơ,Thời trang,30.9
+2023-05,Cần Thơ,Gia dụng,26.5
+2023-05,Cần Thơ,Thực phẩm,24.8
+2023-06,TP.HCM,Điện tử,203.2
+2023-06,TP.HCM,Thời trang,127.5
+2023-06,TP.HCM,Gia dụng,133.9
+2023-06,TP.HCM,Thực phẩm,85.9
+2023-06,Hà Nội,Điện tử,124.5
+2023-06,Hà Nội,Thời trang,88.6
+2023-06,Hà Nội,Gia dụng,72.0
+2023-06,Hà Nội,Thực phẩm,69.6
+2023-06,Đà Nẵng,Điện tử,86.1
+2023-06,Đà Nẵng,Thời trang,56.3
+2023-06,Đà Nẵng,Gia dụng,47.5
+2023-06,Đà Nẵng,Thực phẩm,43.9
+2023-06,Hải Phòng,Điện tử,49.7
+2023-06,Hải Phòng,Thời trang,47.5
+2023-06,Hải Phòng,Gia dụng,20.2
+2023-06,Hải Phòng,Thực phẩm,40.6
+2023-06,Cần Thơ,Điện tử,49.7
+2023-06,Cần Thơ,Thời trang,25.1
+2023-06,Cần Thơ,Gia dụng,50.5
+2023-06,Cần Thơ,Thực phẩm,43.6
+2023-07,TP.HCM,Điện tử,203.4
+2023-07,TP.HCM,Thời trang,151.3
+2023-07,TP.HCM,Gia dụng,135.5
+2023-07,TP.HCM,Thực phẩm,103.0
+2023-07,Hà Nội,Điện tử,124.5
+2023-07,Hà Nội,Thời trang,111.2
+2023-07,Hà Nội,Gia dụng,83.9
+2023-07,Hà Nội,Thực phẩm,80.1
+2023-07,Đà Nẵng,Điện tử,61.8
+2023-07,Đà Nẵng,Thời trang,64.6
+2023-07,Đà Nẵng,Gia dụng,57.1
+2023-07,Đà Nẵng,Thực phẩm,35.6
+2023-07,Hải Phòng,Điện tử,82.5
+2023-07,Hải Phòng,Thời trang,43.1
+2023-07,Hải Phòng,Gia dụng,24.6
+2023-07,Hải Phòng,Thực phẩm,40.9
+2023-07,Cần Thơ,Điện tử,51.6
+2023-07,Cần Thơ,Thời trang,19.9
+2023-07,Cần Thơ,Gia dụng,44.2
+2023-07,Cần Thơ,Thực phẩm,28.2
+2023-08,TP.HCM,Điện tử,206.2
+2023-08,TP.HCM,Thời trang,155.1
+2023-08,TP.HCM,Gia dụng,145.5
+2023-08,TP.HCM,Thực phẩm,99.7
+2023-08,Hà Nội,Điện tử,137.2
+2023-08,Hà Nội,Thời trang,114.6
+2023-08,Hà Nội,Gia dụng,99.4
+2023-08,Hà Nội,Thực phẩm,58.8
+2023-08,Đà Nẵng,Điện tử,91.4
+2023-08,Đà Nẵng,Thời trang,66.0
+2023-08,Đà Nẵng,Gia dụng,51.3
+2023-08,Đà Nẵng,Thực phẩm,46.7
+2023-08,Hải Phòng,Điện tử,56.6
+2023-08,Hải Phòng,Thời trang,44.7
+2023-08,Hải Phòng,Gia dụng,41.4
+2023-08,Hải Phòng,Thực phẩm,51.3
+2023-08,Cần Thơ,Điện tử,32.9
+2023-08,Cần Thơ,Thời trang,15.7
+2023-08,Cần Thơ,Gia dụng,38.4
+2023-08,Cần Thơ,Thực phẩm,33.4
+2023-09,TP.HCM,Điện tử,209.2
+2023-09,TP.HCM,Thời trang,147.7
+2023-09,TP.HCM,Gia dụng,135.5
+2023-09,TP.HCM,Thực phẩm,103.5
+2023-09,Hà Nội,Điện tử,146.9
+2023-09,Hà Nội,Thời trang,98.6
+2023-09,Hà Nội,Gia dụng,99.4
+2023-09,Hà Nội,Thực phẩm,58.8
+2023-09,Đà Nẵng,Điện tử,116.8
+2023-09,Đà Nẵng,Thời trang,48.6
+2023-09,Đà Nẵng,Gia dụng,70.4
+2023-09,Đà Nẵng,Thực phẩm,58.0
+2023-09,Hải Phòng,Điện tử,96.9
+2023-09,Hải Phòng,Thời trang,50.8
+2023-09,Hải Phòng,Gia dụng,56.9
+2023-09,Hải Phòng,Thực phẩm,39.8
+2023-09,Cần Thơ,Điện tử,53.3
+2023-09,Cần Thơ,Thời trang,24.0
+2023-09,Cần Thơ,Gia dụng,41.4
+2023-09,Cần Thơ,Thực phẩm,18.5
+2023-10,TP.HCM,Điện tử,212.3
+2023-10,TP.HCM,Thời trang,154.3
+2023-10,TP.HCM,Gia dụng,117.6
+2023-10,TP.HCM,Thực phẩm,123.1
+2023-10,Hà Nội,Điện tử,141.3
+2023-10,Hà Nội,Thời trang,88.9
+2023-10,Hà Nội,Gia dụng,77.3
+2023-10,Hà Nội,Thực phẩm,73.2
+2023-10,Đà Nẵng,Điện tử,116.5
+2023-10,Đà Nẵng,Thời trang,54.1
+2023-10,Đà Nẵng,Gia dụng,69.6
+2023-10,Đà Nẵng,Thực phẩm,63.5
+2023-10,Hải Phòng,Điện tử,69.6
+2023-10,Hải Phòng,Thời trang,44.7
+2023-10,Hải Phòng,Gia dụng,46.4
+2023-10,Hải Phòng,Thực phẩm,42.0
+2023-10,Cần Thơ,Điện tử,34.5
+2023-10,Cần Thơ,Thời trang,19.3
+2023-10,Cần Thơ,Gia dụng,18.8
+2023-10,Cần Thơ,Thực phẩm,26.8
+2023-11,TP.HCM,Điện tử,236.9
+2023-11,TP.HCM,Thời trang,178.6
+2023-11,TP.HCM,Gia dụng,154.9
+2023-11,TP.HCM,Thực phẩm,122.8
+2023-11,Hà Nội,Điện tử,178.1
+2023-11,Hà Nội,Thời trang,106.0
+2023-11,Hà Nội,Gia dụng,114.0
+2023-11,Hà Nội,Thực phẩm,96.6
+2023-11,Đà Nẵng,Điện tử,112.6
+2023-11,Đà Nẵng,Thời trang,77.3
+2023-11,Đà Nẵng,Gia dụng,61.3
+2023-11,Đà Nẵng,Thực phẩm,64.3
+2023-11,Hải Phòng,Điện tử,89.7
+2023-11,Hải Phòng,Thời trang,54.1
+2023-11,Hải Phòng,Gia dụng,63.5
+2023-11,Hải Phòng,Thực phẩm,43.3
+2023-11,Cần Thơ,Điện tử,48.9
+2023-11,Cần Thơ,Thời trang,38.6
+2023-11,Cần Thơ,Gia dụng,28.2
+2023-11,Cần Thơ,Thực phẩm,31.2
+2023-12,TP.HCM,Điện tử,237.1
+2023-12,TP.HCM,Thời trang,175.8
+2023-12,TP.HCM,Gia dụng,154.6
+2023-12,TP.HCM,Thực phẩm,126.7
+2023-12,Hà Nội,Điện tử,178.1
+2023-12,Hà Nội,Thời trang,118.7
+2023-12,Hà Nội,Gia dụng,105.7
+2023-12,Hà Nội,Thực phẩm,90.5
+2023-12,Đà Nẵng,Điện tử,120.6
+2023-12,Đà Nẵng,Thời trang,80.9
+2023-12,Đà Nẵng,Gia dụng,80.1
+2023-12,Đà Nẵng,Thực phẩm,72.3
+2023-12,Hải Phòng,Điện tử,71.5
+2023-12,Hải Phòng,Thời trang,72.9
+2023-12,Hải Phòng,Gia dụng,52.4
+2023-12,Hải Phòng,Thực phẩm,27.3
+2023-12,Cần Thơ,Điện tử,57.1
+2023-12,Cần Thơ,Thời trang,46.7
+2023-12,Cần Thơ,Gia dụng,53.8
+2023-12,Cần Thơ,Thực phẩm,21.0
+2024-01,TP.HCM,Điện tử,246.4
+2024-01,TP.HCM,Thời trang,158.9
+2024-01,TP.HCM,Gia dụng,146.5
+2024-01,TP.HCM,Thực phẩm,133.7
+2024-01,Hà Nội,Điện tử,160.7
+2024-01,Hà Nội,Thời trang,122.9
+2024-01,Hà Nội,Gia dụng,78.2
+2024-01,Hà Nội,Thực phẩm,92.4
+2024-01,Đà Nẵng,Điện tử,104.3
+2024-01,Đà Nẵng,Thời trang,52.3
+2024-01,Đà Nẵng,Gia dụng,80.8
+2024-01,Đà Nẵng,Thực phẩm,38.4
+2024-01,Hải Phòng,Điện tử,76.1
+2024-01,Hải Phòng,Thời trang,65.1
+2024-01,Hải Phòng,Gia dụng,58.1
+2024-01,Hải Phòng,Thực phẩm,33.1
+2024-01,Cần Thơ,Điện tử,69.2
+2024-01,Cần Thơ,Thời trang,40.1
+2024-01,Cần Thơ,Gia dụng,36.0
+2024-01,Cần Thơ,Thực phẩm,33.1
+2024-02,TP.HCM,Điện tử,172.6
+2024-02,TP.HCM,Thời trang,130.2
+2024-02,TP.HCM,Gia dụng,108.7
+2024-02,TP.HCM,Thực phẩm,109.5
+2024-02,Hà Nội,Điện tử,118.8
+2024-02,Hà Nội,Thời trang,97.9
+2024-02,Hà Nội,Gia dụng,82.8
+2024-02,Hà Nội,Thực phẩm,68.9
+2024-02,Đà Nẵng,Điện tử,71.5
+2024-02,Đà Nẵng,Thời trang,54.0
+2024-02,Đà Nẵng,Gia dụng,46.5
+2024-02,Đà Nẵng,Thực phẩm,48.8
+2024-02,Hải Phòng,Điện tử,68.0
+2024-02,Hải Phòng,Thời trang,25.6
+2024-02,Hải Phòng,Gia dụng,42.7
+2024-02,Hải Phòng,Thực phẩm,19.8
+2024-02,Cần Thơ,Điện tử,45.9
+2024-02,Cần Thơ,Thời trang,20.3
+2024-02,Cần Thơ,Gia dụng,14.5
+2024-02,Cần Thơ,Thực phẩm,16.9
+2024-03,TP.HCM,Điện tử,197.9
+2024-03,TP.HCM,Thời trang,146.2
+2024-03,TP.HCM,Gia dụng,136.3
+2024-03,TP.HCM,Thực phẩm,126.4
+2024-03,Hà Nội,Điện tử,162.7
+2024-03,Hà Nội,Thời trang,104.0
+2024-03,Hà Nội,Gia dụng,100.3
+2024-03,Hà Nội,Thực phẩm,70.9
+2024-03,Đà Nẵng,Điện tử,92.7
+2024-03,Đà Nẵng,Thời trang,74.7
+2024-03,Đà Nẵng,Gia dụng,66.0
+2024-03,Đà Nẵng,Thực phẩm,44.7
+2024-03,Hải Phòng,Điện tử,70.9
+2024-03,Hải Phòng,Thời trang,70.0
+2024-03,Hải Phòng,Gia dụng,41.6
+2024-03,Hải Phòng,Thực phẩm,31.4
+2024-03,Cần Thơ,Điện tử,62.8
+2024-03,Cần Thơ,Thời trang,24.4
+2024-03,Cần Thơ,Gia dụng,50.0
+2024-03,Cần Thơ,Thực phẩm,26.2
+2024-04,TP.HCM,Điện tử,224.6
+2024-04,TP.HCM,Thời trang,173.2
+2024-04,TP.HCM,Gia dụng,133.4
+2024-04,TP.HCM,Thực phẩm,120.6
+2024-04,Hà Nội,Điện tử,163.0
+2024-04,Hà Nội,Thời trang,102.6
+2024-04,Hà Nội,Gia dụng,104.9
+2024-04,Hà Nội,Thực phẩm,75.6
+2024-04,Đà Nẵng,Điện tử,100.3
+2024-04,Đà Nẵng,Thời trang,97.9
+2024-04,Đà Nẵng,Gia dụng,55.5
+2024-04,Đà Nẵng,Thực phẩm,38.4
+2024-04,Hải Phòng,Điện tử,75.6
+2024-04,Hải Phòng,Thời trang,48.5
+2024-04,Hải Phòng,Gia dụng,39.5
+2024-04,Hải Phòng,Thực phẩm,17.4
+2024-04,Cần Thơ,Điện tử,49.1
+2024-04,Cần Thơ,Thời trang,32.5
+2024-04,Cần Thơ,Gia dụng,24.1
+2024-04,Cần Thơ,Thực phẩm,26.4
+2024-05,TP.HCM,Điện tử,239.7
+2024-05,TP.HCM,Thời trang,170.6
+2024-05,TP.HCM,Gia dụng,143.5
+2024-05,TP.HCM,Thực phẩm,128.1
+2024-05,Hà Nội,Điện tử,132.5
+2024-05,Hà Nội,Thời trang,105.2
+2024-05,Hà Nội,Gia dụng,107.8
+2024-05,Hà Nội,Thực phẩm,79.3
+2024-05,Đà Nẵng,Điện tử,88.3
+2024-05,Đà Nẵng,Thời trang,56.1
+2024-05,Đà Nẵng,Gia dụng,38.9
+2024-05,Đà Nẵng,Thực phẩm,53.8
+2024-05,Hải Phòng,Điện tử,68.6
+2024-05,Hải Phòng,Thời trang,61.3
+2024-05,Hải Phòng,Gia dụng,34.6
+2024-05,Hải Phòng,Thực phẩm,42.7
+2024-05,Cần Thơ,Điện tử,60.4
+2024-05,Cần Thơ,Thời trang,39.2
+2024-05,Cần Thơ,Gia dụng,37.2
+2024-05,Cần Thơ,Thực phẩm,15.1
+2024-06,TP.HCM,Điện tử,212.1
+2024-06,TP.HCM,Thời trang,157.2
+2024-06,TP.HCM,Gia dụng,127.9
+2024-06,TP.HCM,Thực phẩm,136.9
+2024-06,Hà Nội,Điện tử,161.6
+2024-06,Hà Nội,Thời trang,112.2
+2024-06,Hà Nội,Gia dụng,102.6
+2024-06,Hà Nội,Thực phẩm,78.2
+2024-06,Đà Nẵng,Điện tử,81.7
+2024-06,Đà Nẵng,Thời trang,71.5
+2024-06,Đà Nẵng,Gia dụng,71.8
+2024-06,Đà Nẵng,Thực phẩm,54.0
+2024-06,Hải Phòng,Điện tử,77.3
+2024-06,Hải Phòng,Thời trang,45.9
+2024-06,Hải Phòng,Gia dụng,52.3
+2024-06,Hải Phòng,Thực phẩm,43.0
+2024-06,Cần Thơ,Điện tử,49.4
+2024-06,Cần Thơ,Thời trang,44.7
+2024-06,Cần Thơ,Gia dụng,20.1
+2024-06,Cần Thơ,Thực phẩm,26.4
+2024-07,TP.HCM,Điện tử,212.4
+2024-07,TP.HCM,Thời trang,155.8
+2024-07,TP.HCM,Gia dụng,140.4
+2024-07,TP.HCM,Thực phẩm,118.0
+2024-07,Hà Nội,Điện tử,136.0
+2024-07,Hà Nội,Thời trang,96.5
+2024-07,Hà Nội,Gia dụng,91.8
+2024-07,Hà Nội,Thực phẩm,66.5
+2024-07,Đà Nẵng,Điện tử,111.0
+2024-07,Đà Nẵng,Thời trang,67.7
+2024-07,Đà Nẵng,Gia dụng,61.3
+2024-07,Đà Nẵng,Thực phẩm,56.7
+2024-07,Hải Phòng,Điện tử,82.5
+2024-07,Hải Phòng,Thời trang,49.7
+2024-07,Hải Phòng,Gia dụng,40.4
+2024-07,Hải Phòng,Thực phẩm,40.7
+2024-07,Cần Thơ,Điện tử,63.1
+2024-07,Cần Thơ,Thời trang,31.7
+2024-07,Cần Thơ,Gia dụng,44.5
+2024-07,Cần Thơ,Thực phẩm,14.5
+2024-08,TP.HCM,Điện tử,218.8
+2024-08,TP.HCM,Thời trang,176.4
+2024-08,TP.HCM,Gia dụng,137.2
+2024-08,TP.HCM,Thực phẩm,112.7
+2024-08,Hà Nội,Điện tử,149.6
+2024-08,Hà Nội,Thời trang,120.0
+2024-08,Hà Nội,Gia dụng,107.5
+2024-08,Hà Nội,Thực phẩm,84.8
+2024-08,Đà Nẵng,Điện tử,93.9
+2024-08,Đà Nẵng,Thời trang,44.7
+2024-08,Đà Nẵng,Gia dụng,45.3
+2024-08,Đà Nẵng,Thực phẩm,43.6
+2024-08,Hải Phòng,Điện tử,68.0
+2024-08,Hải Phòng,Thời trang,55.2
+2024-08,Hải Phòng,Gia dụng,57.5
+2024-08,Hải Phòng,Thực phẩm,40.4
+2024-08,Cần Thơ,Điện tử,45.3
+2024-08,Cần Thơ,Thời trang,39.8
+2024-08,Cần Thơ,Gia dụng,33.1
+2024-08,Cần Thơ,Thực phẩm,42.1
+2024-09,TP.HCM,Điện tử,243.8
+2024-09,TP.HCM,Thời trang,175.2
+2024-09,TP.HCM,Gia dụng,161.3
+2024-09,TP.HCM,Thực phẩm,129.6
+2024-09,Hà Nội,Điện tử,171.2
+2024-09,Hà Nội,Thời trang,85.4
+2024-09,Hà Nội,Gia dụng,115.7
+2024-09,Hà Nội,Thực phẩm,69.4
+2024-09,Đà Nẵng,Điện tử,106.4
+2024-09,Đà Nẵng,Thời trang,77.3
+2024-09,Đà Nẵng,Gia dụng,62.2
+2024-09,Đà Nẵng,Thực phẩm,59.9
+2024-09,Hải Phòng,Điện tử,94.4
+2024-09,Hải Phòng,Thời trang,59.0
+2024-09,Hải Phòng,Gia dụng,44.2
+2024-09,Hải Phòng,Thực phẩm,38.1
+2024-09,Cần Thơ,Điện tử,59.3
+2024-09,Cần Thơ,Thời trang,38.9
+2024-09,Cần Thơ,Gia dụng,33.1
+2024-09,Cần Thơ,Thực phẩm,31.1
+2024-10,TP.HCM,Điện tử,238.9
+2024-10,TP.HCM,Thời trang,181.3
+2024-10,TP.HCM,Gia dụng,156.6
+2024-10,TP.HCM,Thực phẩm,120.3
+2024-10,Hà Nội,Điện tử,163.3
+2024-10,Hà Nội,Thời trang,141.2
+2024-10,Hà Nội,Gia dụng,90.7
+2024-10,Hà Nội,Thực phẩm,97.1
+2024-10,Đà Nẵng,Điện tử,92.1
+2024-10,Đà Nẵng,Thời trang,59.3
+2024-10,Đà Nẵng,Gia dụng,57.0
+2024-10,Đà Nẵng,Thực phẩm,50.9
+2024-10,Hải Phòng,Điện tử,92.4
+2024-10,Hải Phòng,Thời trang,51.7
+2024-10,Hải Phòng,Gia dụng,23.5
+2024-10,Hải Phòng,Thực phẩm,39.8
+2024-10,Cần Thơ,Điện tử,57.2
+2024-10,Cần Thơ,Thời trang,46.2
+2024-10,Cần Thơ,Gia dụng,38.1
+2024-10,Cần Thơ,Thực phẩm,14.5
+2024-11,TP.HCM,Điện tử,265.9
+2024-11,TP.HCM,Thời trang,196.7
+2024-11,TP.HCM,Gia dụng,166.8
+2024-11,TP.HCM,Thực phẩm,164.8
+2024-11,Hà Nội,Điện tử,173.2
+2024-11,Hà Nội,Thời trang,139.2
+2024-11,Hà Nội,Gia dụng,121.5
+2024-11,Hà Nội,Thực phẩm,86.6
+2024-11,Đà Nẵng,Điện tử,111.6
+2024-11,Đà Nẵng,Thời trang,89.5
+2024-11,Đà Nẵng,Gia dụng,73.5
+2024-11,Đà Nẵng,Thực phẩm,54.0
+2024-11,Hải Phòng,Điện tử,102.9
+2024-11,Hải Phòng,Thời trang,71.2
+2024-11,Hải Phòng,Gia dụng,45.6
+2024-11,Hải Phòng,Thực phẩm,52.0
+2024-11,Cần Thơ,Điện tử,38.6
+2024-11,Cần Thơ,Thời trang,33.1
+2024-11,Cần Thơ,Gia dụng,28.5
+2024-11,Cần Thơ,Thực phẩm,34.3
+2024-12,TP.HCM,Điện tử,290.3
+2024-12,TP.HCM,Thời trang,212.1
+2024-12,TP.HCM,Gia dụng,173.5
+2024-12,TP.HCM,Thực phẩm,138.3
+2024-12,Hà Nội,Điện tử,189.2
+2024-12,Hà Nội,Thời trang,138.6
+2024-12,Hà Nội,Gia dụng,118.3
+2024-12,Hà Nội,Thực phẩm,84.8
+2024-12,Đà Nẵng,Điện tử,102.9
+2024-12,Đà Nẵng,Thời trang,82.2
+2024-12,Đà Nẵng,Gia dụng,59.3
+2024-12,Đà Nẵng,Thực phẩm,54.3
+2024-12,Hải Phòng,Điện tử,83.4
+2024-12,Hải Phòng,Thời trang,53.5
+2024-12,Hải Phòng,Gia dụng,52.3
+2024-12,Hải Phòng,Thực phẩm,66.5
+2024-12,Cần Thơ,Điện tử,86.6
+2024-12,Cần Thơ,Thời trang,42.1
+2024-12,Cần Thơ,Gia dụng,36.3
+2024-12,Cần Thơ,Thực phẩm,22.4
+2025-01,TP.HCM,Điện tử,277.0
+2025-01,TP.HCM,Thời trang,186.1
+2025-01,TP.HCM,Gia dụng,158.4
+2025-01,TP.HCM,Thực phẩm,123.2
+2025-01,Hà Nội,Điện tử,170.5
+2025-01,Hà Nội,Thời trang,94.1
+2025-01,Hà Nội,Gia dụng,117.2
+2025-01,Hà Nội,Thực phẩm,67.5
+2025-01,Đà Nẵng,Điện tử,83.5
+2025-01,Đà Nẵng,Thời trang,68.4
+2025-01,Đà Nẵng,Gia dụng,66.0
+2025-01,Đà Nẵng,Thực phẩm,47.8
+2025-01,Hải Phòng,Điện tử,63.4
+2025-01,Hải Phòng,Thời trang,60.4
+2025-01,Hải Phòng,Gia dụng,57.3
+2025-01,Hải Phòng,Thực phẩm,56.7
+2025-01,Cần Thơ,Điện tử,62.5
+2025-01,Cần Thơ,Thời trang,36.8
+2025-01,Cần Thơ,Gia dụng,39.7
+2025-01,Cần Thơ,Thực phẩm,24.3
+2025-02,TP.HCM,Điện tử,179.3
+2025-02,TP.HCM,Thời trang,147.0
+2025-02,TP.HCM,Gia dụng,120.2
+2025-02,TP.HCM,Thực phẩm,114.0
+2025-02,Hà Nội,Điện tử,138.5
+2025-02,Hà Nội,Thời trang,82.9
+2025-02,Hà Nội,Gia dụng,80.5
+2025-02,Hà Nội,Thực phẩm,75.2
+2025-02,Đà Nẵng,Điện tử,85.4
+2025-02,Đà Nẵng,Thời trang,41.0
+2025-02,Đà Nẵng,Gia dụng,37.1
+2025-02,Đà Nẵng,Thực phẩm,50.0
+2025-02,Hải Phòng,Điện tử,49.4
+2025-02,Hải Phòng,Thời trang,40.6
+2025-02,Hải Phòng,Gia dụng,45.1
+2025-02,Hải Phòng,Thực phẩm,27.1
+2025-02,Cần Thơ,Điện tử,57.7
+2025-02,Cần Thơ,Thời trang,47.7
+2025-02,Cần Thơ,Gia dụng,31.7
+2025-02,Cần Thơ,Thực phẩm,26.6
+2025-03,TP.HCM,Điện tử,249.3
+2025-03,TP.HCM,Thời trang,182.1
+2025-03,TP.HCM,Gia dụng,156.2
+2025-03,TP.HCM,Thực phẩm,129.1
+2025-03,Hà Nội,Điện tử,152.4
+2025-03,Hà Nội,Thời trang,121.1
+2025-03,Hà Nội,Gia dụng,105.4
+2025-03,Hà Nội,Thực phẩm,81.7
+2025-03,Đà Nẵng,Điện tử,81.9
+2025-03,Đà Nẵng,Thời trang,84.1
+2025-03,Đà Nẵng,Gia dụng,76.4
+2025-03,Đà Nẵng,Thực phẩm,47.6
+2025-03,Hải Phòng,Điện tử,73.5
+2025-03,Hải Phòng,Thời trang,60.7
+2025-03,Hải Phòng,Gia dụng,58.0
+2025-03,Hải Phòng,Thực phẩm,22.9
+2025-03,Cần Thơ,Điện tử,62.3
+2025-03,Cần Thơ,Thời trang,42.0
+2025-03,Cần Thơ,Gia dụng,17.4
+2025-03,Cần Thơ,Thực phẩm,15.7
+2025-04,TP.HCM,Điện tử,246.2
+2025-04,TP.HCM,Thời trang,183.9
+2025-04,TP.HCM,Gia dụng,177.2
+2025-04,TP.HCM,Thực phẩm,120.8
+2025-04,Hà Nội,Điện tử,164.9
+2025-04,Hà Nội,Thời trang,118.1
+2025-04,Hà Nội,Gia dụng,93.2
+2025-04,Hà Nội,Thực phẩm,85.5
+2025-04,Đà Nẵng,Điện tử,106.3
+2025-04,Đà Nẵng,Thời trang,76.4
+2025-04,Đà Nẵng,Gia dụng,70.4
+2025-04,Đà Nẵng,Thực phẩm,49.2
+2025-04,Hải Phòng,Điện tử,94.3
+2025-04,Hải Phòng,Thời trang,56.4
+2025-04,Hải Phòng,Gia dụng,46.1
+2025-04,Hải Phòng,Thực phẩm,33.6
+2025-04,Cần Thơ,Điện tử,64.8
+2025-04,Cần Thơ,Thời trang,44.0
+2025-04,Cần Thơ,Gia dụng,19.7
+2025-04,Cần Thơ,Thực phẩm,36.6
+2025-05,TP.HCM,Điện tử,242.5
+2025-05,TP.HCM,Thời trang,191.3
+2025-05,TP.HCM,Gia dụng,164.2
+2025-05,TP.HCM,Thực phẩm,137.1
+2025-05,Hà Nội,Điện tử,167.2
+2025-05,Hà Nội,Thời trang,108.9
+2025-05,Hà Nội,Gia dụng,117.2
+2025-05,Hà Nội,Thực phẩm,87.0
+2025-05,Đà Nẵng,Điện tử,51.7
+2025-05,Đà Nẵng,Thời trang,60.5
+2025-05,Đà Nẵng,Gia dụng,51.1
+2025-05,Đà Nẵng,Thực phẩm,52.5
+2025-05,Hải Phòng,Điện tử,96.4
+2025-05,Hải Phòng,Thời trang,82.1
+2025-05,Hải Phòng,Gia dụng,57.0
+2025-05,Hải Phòng,Thực phẩm,39.0
+2025-05,Cần Thơ,Điện tử,33.1
+2025-05,Cần Thơ,Thời trang,43.1
+2025-05,Cần Thơ,Gia dụng,14.3
+2025-05,Cần Thơ,Thực phẩm,19.1
+2025-06,TP.HCM,Điện tử,229.2
+2025-06,TP.HCM,Thời trang,148.5
+2025-06,TP.HCM,Gia dụng,154.0
+2025-06,TP.HCM,Thực phẩm,112.8
+2025-06,Hà Nội,Điện tử,162.5
+2025-06,Hà Nội,Thời trang,127.0
+2025-06,Hà Nội,Gia dụng,107.2
+2025-06,Hà Nội,Thực phẩm,83.8
+2025-06,Đà Nẵng,Điện tử,44.9
+2025-06,Đà Nẵng,Thời trang,71.5
+2025-06,Đà Nẵng,Gia dụng,81.4
+2025-06,Đà Nẵng,Thực phẩm,53.6
+2025-06,Hải Phòng,Điện tử,91.8
+2025-06,Hải Phòng,Thời trang,55.8
+2025-06,Hải Phòng,Gia dụng,50.6
+2025-06,Hải Phòng,Thực phẩm,34.5
+2025-06,Cần Thơ,Điện tử,39.4
+2025-06,Cần Thơ,Thời trang,52.5
+2025-06,Cần Thơ,Gia dụng,21.4
+2025-06,Cần Thơ,Thực phẩm,25.7
+2025-07,TP.HCM,Điện tử,251.1
+2025-07,TP.HCM,Thời trang,185.5
+2025-07,TP.HCM,Gia dụng,171.0
+2025-07,TP.HCM,Thực phẩm,134.0
+2025-07,Hà Nội,Điện tử,140.3
+2025-07,Hà Nội,Thời trang,114.9
+2025-07,Hà Nội,Gia dụng,86.4
+2025-07,Hà Nội,Thực phẩm,82.3
+2025-07,Đà Nẵng,Điện tử,42.7
+2025-07,Đà Nẵng,Thời trang,67.3
+2025-07,Đà Nẵng,Gia dụng,61.6
+2025-07,Đà Nẵng,Thực phẩm,43.4
+2025-07,Hải Phòng,Điện tử,76.6
+2025-07,Hải Phòng,Thời trang,57.7
+2025-07,Hải Phòng,Gia dụng,43.0
+2025-07,Hải Phòng,Thực phẩm,38.4
+2025-07,Cần Thơ,Điện tử,59.7
+2025-07,Cần Thơ,Thời trang,51.1
+2025-07,Cần Thơ,Gia dụng,33.4
+2025-07,Cần Thơ,Thực phẩm,34.8
+2025-08,TP.HCM,Điện tử,250.5
+2025-08,TP.HCM,Thời trang,180.5
+2025-08,TP.HCM,Gia dụng,147.0
+2025-08,TP.HCM,Thực phẩm,128.2
+2025-08,Hà Nội,Điện tử,167.5
+2025-08,Hà Nội,Thời trang,129.7
+2025-08,Hà Nội,Gia dụng,126.1
+2025-08,Hà Nội,Thực phẩm,81.7
+2025-08,Đà Nẵng,Điện tử,43.5
+2025-08,Đà Nẵng,Thời trang,62.1
+2025-08,Đà Nẵng,Gia dụng,53.0
+2025-08,Đà Nẵng,Thực phẩm,55.2
+2025-08,Hải Phòng,Điện tử,94.6
+2025-08,Hải Phòng,Thời trang,61.3
+2025-08,Hải Phòng,Gia dụng,48.8
+2025-08,Hải Phòng,Thực phẩm,48.8
+2025-08,Cần Thơ,Điện tử,65.1
+2025-08,Cần Thơ,Thời trang,42.8
+2025-08,Cần Thơ,Gia dụng,46.8
+2025-08,Cần Thơ,Thực phẩm,21.1
+2025-09,TP.HCM,Điện tử,273.3
+2025-09,TP.HCM,Thời trang,195.0
+2025-09,TP.HCM,Gia dụng,144.2
+2025-09,TP.HCM,Thực phẩm,134.9
+2025-09,Hà Nội,Điện tử,196.3
+2025-09,Hà Nội,Thời trang,97.1
+2025-09,Hà Nội,Gia dụng,97.7
+2025-09,Hà Nội,Thực phẩm,97.7
+2025-09,Đà Nẵng,Điện tử,56.0
+2025-09,Đà Nẵng,Thời trang,67.6
+2025-09,Đà Nẵng,Gia dụng,78.6
+2025-09,Đà Nẵng,Thực phẩm,48.4
+2025-09,Hải Phòng,Điện tử,83.9
+2025-09,Hải Phòng,Thời trang,64.4
+2025-09,Hải Phòng,Gia dụng,42.1
+2025-09,Hải Phòng,Thực phẩm,36.9
+2025-09,Cần Thơ,Điện tử,56.5
+2025-09,Cần Thơ,Thời trang,39.1
+2025-09,Cần Thơ,Gia dụng,37.7
+2025-09,Cần Thơ,Thực phẩm,22.6
+2025-10,TP.HCM,Điện tử,277.6
+2025-10,TP.HCM,Thời trang,209.5
+2025-10,TP.HCM,Gia dụng,173.2
+2025-10,TP.HCM,Thực phẩm,127.9
+2025-10,Hà Nội,Điện tử,153.0
+2025-10,Hà Nội,Thời trang,124.0
+2025-10,Hà Nội,Gia dụng,116.3
+2025-10,Hà Nội,Thực phẩm,111.0
+2025-10,Đà Nẵng,Điện tử,48.1
+2025-10,Đà Nẵng,Thời trang,77.8
+2025-10,Đà Nẵng,Gia dụng,66.5
+2025-10,Đà Nẵng,Thực phẩm,48.7
+2025-10,Hải Phòng,Điện tử,93.6
+2025-10,Hải Phòng,Thời trang,71.7
+2025-10,Hải Phòng,Gia dụng,38.1
+2025-10,Hải Phòng,Thực phẩm,54.3
+2025-10,Cần Thơ,Điện tử,81.4
+2025-10,Cần Thơ,Thời trang,50.5
+2025-10,Cần Thơ,Gia dụng,34.6
+2025-10,Cần Thơ,Thực phẩm,39.1
+2025-11,TP.HCM,Điện tử,317.6
+2025-11,TP.HCM,Thời trang,224.6
+2025-11,TP.HCM,Gia dụng,187.0
+2025-11,TP.HCM,Thực phẩm,136.8
+2025-11,Hà Nội,Điện tử,198.6
+2025-11,Hà Nội,Thời trang,143.3
+2025-11,Hà Nội,Gia dụng,144.2
+2025-11,Hà Nội,Thực phẩm,100.9
+2025-11,Đà Nẵng,Điện tử,61.7
+2025-11,Đà Nẵng,Thời trang,90.4
+2025-11,Đà Nẵng,Gia dụng,81.6
+2025-11,Đà Nẵng,Thực phẩm,41.0
+2025-11,Hải Phòng,Điện tử,115.6
+2025-11,Hải Phòng,Thời trang,71.4
+2025-11,Hải Phòng,Gia dụng,68.9
+2025-11,Hải Phòng,Thực phẩm,39.7
+2025-11,Cần Thơ,Điện tử,62.0
+2025-11,Cần Thơ,Thời trang,60.3
+2025-11,Cần Thơ,Gia dụng,45.1
+2025-11,Cần Thơ,Thực phẩm,53.7
+2025-12,TP.HCM,Điện tử,320.4
+2025-12,TP.HCM,Thời trang,224.3
+2025-12,TP.HCM,Gia dụng,213.5
+2025-12,TP.HCM,Thực phẩm,169.1
+2025-12,Hà Nội,Điện tử,208.4
+2025-12,Hà Nội,Thời trang,157.5
+2025-12,Hà Nội,Gia dụng,129.1
+2025-12,Hà Nội,Thực phẩm,123.4
+2025-12,Đà Nẵng,Điện tử,69.9
+2025-12,Đà Nẵng,Thời trang,81.6
+2025-12,Đà Nẵng,Gia dụng,64.6
+2025-12,Đà Nẵng,Thực phẩm,70.4
+2025-12,Hải Phòng,Điện tử,103.1
+2025-12,Hải Phòng,Thời trang,61.0
+2025-12,Hải Phòng,Gia dụng,87.5
+2025-12,Hải Phòng,Thực phẩm,44.8
+2025-12,Cần Thơ,Điện tử,59.7
+2025-12,Cần Thơ,Thời trang,51.7
+2025-12,Cần Thơ,Gia dụng,32.8
+2025-12,Cần Thơ,Thực phẩm,20.6

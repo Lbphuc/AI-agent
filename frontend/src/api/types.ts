@@ -1,8 +1,7 @@
 /**
  * Kiểu dữ liệu API – mapping từ schemas.py của FastAPI backend.
- * Được viết tay dựa theo AnalyzeResponse, ChartSpec, InsightResult, AnalysisGoal.
- * Khi backend thay đổi, cập nhật file này hoặc chạy:
- *   npx openapi-typescript http://localhost:8000/openapi.json -o src/api/types.ts
+ * Khớp với hệ thống phân tích sâu 3 cấp (Diagnostic, Forecast, Prescriptive)
+ * và Chế độ phân tích dạng Pills (ModePicker).
  */
 
 export type TaskType = "trend" | "comparison" | "growth_rate";
@@ -15,6 +14,42 @@ export type TimeScope =
   | "custom";
 export type ChartType = "line" | "area" | "bar" | "bar_horizontal" | "pie";
 export type ChartHint = "area" | "pie";
+
+export type AnalysisLevel = "descriptive" | "diagnostic" | "forecast" | "prescriptive";
+export type AnalysisMode = "auto" | "descriptive" | "diagnostic" | "forecast" | "prescriptive";
+
+export interface ModeAvailability {
+  available: boolean;
+  reason?: string | null;
+}
+
+export interface ColumnProfile {
+  name: string;
+  dtype: string;
+  n_unique: number;
+  n_missing: number;
+  samples: string[];
+  min?: string | null;
+  max?: string | null;
+  description?: string | null;
+  semantic_type?: string | null;
+  display_name?: string | null;
+  unit?: string | null;
+}
+
+export interface DataProfile {
+  row_count: number;
+  columns: ColumnProfile[];
+  time_column?: string | null;
+  time_min?: string | null;
+  time_max?: string | null;
+  group_columns: string[];
+  numeric_columns: string[];
+  dataset_description?: string | null;
+  frequency?: string | null;
+  n_periods?: number | null;
+  availability?: Record<string, ModeAvailability>;
+}
 
 export interface AnalysisTask {
   type: TaskType;
@@ -30,6 +65,7 @@ export interface AnalysisGoal {
   time_start: string | null;
   time_end: string | null;
   tasks: AnalysisTask[];
+  levels?: AnalysisLevel[];
 }
 
 export interface ExecutionResult {
@@ -60,7 +96,7 @@ export interface ChartSpec {
   chart_type: ChartType;
   title: string;
   x: string[];
-  series: Record<string, number[]>;
+  series: Record<string, (number | null)[]>;
   highlight_x: string | null;
   role?: ChartRole;
   perspective?: Perspective;
@@ -68,6 +104,11 @@ export interface ChartSpec {
   highlight_series?: string | null;
   display_name?: string | null;
   unit?: string | null;
+  band?: {
+    lower: (number | null)[];
+    upper: (number | null)[];
+  } | null;
+  forecast_from?: string | null;
 }
 
 export interface InsightResult {
@@ -82,6 +123,7 @@ export interface ReportMeta {
   rows_used: number;
   goal_summary: string;
   notes: string[];
+  deepen?: Record<string, ModeAvailability>;
 }
 
 export interface AnalyzeResponse {
@@ -90,6 +132,55 @@ export interface AnalyzeResponse {
   charts: ChartSpec[];
   insight: InsightResult | null;
   meta?: ReportMeta | null;
+}
+
+export interface Notice {
+  kind: "added" | "skipped" | "info";
+  level?: AnalysisLevel | null;
+  message: string;
+}
+
+export interface InterpretResponse {
+  goal: AnalysisGoal;
+  levels: AnalysisLevel[];
+  notices: Notice[];
+  goal_summary: string;
+}
+
+export interface Fact {
+  id: string;
+  kind: "total" | "contribution" | "driver" | "correlation" | "forecast" | "share";
+  entity?: string | null;
+  metric: string;
+  value: number;
+  unit?: string | null;
+  period?: string | null;
+  estimate?: boolean;
+  text: string;
+}
+
+export interface Recommendation {
+  title: string;
+  action: string;
+  rationale: string;
+  fact_ids: string[];
+  priority: "cao" | "trung bình" | "thấp";
+  caveat: string;
+}
+
+export interface Section {
+  level: AnalysisLevel;
+  charts: ChartSpec[];
+  narrative?: InsightResult | null;
+  warnings: string[];
+}
+
+export interface DeepenResponse {
+  level: AnalysisLevel;
+  sections: Section[];
+  recommendations: Recommendation[];
+  facts: Fact[];
+  warnings: string[];
 }
 
 export interface ExportSections {

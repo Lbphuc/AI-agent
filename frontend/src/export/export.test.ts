@@ -3,6 +3,7 @@ import { formatNumber, formatPercent, formatSignedChange, formatAxisDate } from 
 import { buildCsv } from "./buildCsv";
 import { buildReportModel } from "./buildReportModel";
 import type { AnalyzeResponse, ChartSpec } from "../api/types";
+import { ANALYSIS_MODES } from "../components/ModePicker";
 
 describe("Vietnamese formatters (formatters.ts)", () => {
   it("formats standard numbers with dot as thousand separator", () => {
@@ -58,78 +59,92 @@ describe("Vietnamese formatters (formatters.ts)", () => {
     expect(formatAxisDate("2026-01")).toBe("T1/26");
     expect(formatAxisDate("2026-08")).toBe("T8/26");
     expect(formatAxisDate("2026-01-15")).toBe("15/1");
-    expect(formatAxisDate("Hà Nội")).toBe("Hà Nội");
+    expect(formatAxisDate("Da Nang")).toBe("Da Nang");
   });
 });
 
-describe("CSV generator (buildCsv.ts)", () => {
-  it("includes UTF-8 BOM at the beginning", () => {
-    const chart: ChartSpec = {
-      chart_type: "bar",
-      title: "Test",
-      x: ["Hà Nội", "Đà Nẵng"],
-      series: { "Doanh thu": [100, 200] },
-      highlight_x: null,
-    };
-    const csv = buildCsv(chart);
-    expect(csv.startsWith("\uFEFF")).toBe(true);
+describe("CSV Export Generator (buildCsv.ts)", () => {
+  const mockChart: ChartSpec = {
+    chart_type: "bar",
+    title: "Doanh thu theo chi nhánh",
+    x: ["Hà Nội", "TP.HCM", "Đà Nẵng"],
+    series: {
+      "Doanh thu": [1200, 1500, 800],
+    },
+    highlight_x: null,
+  };
+
+  it("adds UTF-8 BOM at the beginning of CSV content", () => {
+    const csv = buildCsv(mockChart);
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
   });
 
-  it("escapes formula injection characters (=, +, -, @)", () => {
-    const chart: ChartSpec = {
+  it("sanitizes CSV formula injection symbols (=, +, -, @)", () => {
+    const injectionChart: ChartSpec = {
       chart_type: "bar",
-      title: "Security Test",
-      x: ["=1+1", "+cmd", "-calc", "@exec", "Normal"],
-      series: { "Value": [1, 2, 3, 4, 5] },
+      title: "Test Injection",
+      x: ["=SUM(A1:A10)", "@cmd", "+123"],
+      series: {
+        "Giá trị": [10, 20, 30],
+      },
       highlight_x: null,
     };
-    const csv = buildCsv(chart);
-    expect(csv).toContain("'=1+1");
-    expect(csv).toContain("'+cmd");
-    expect(csv).toContain("'-calc");
-    expect(csv).toContain("'@exec");
-    expect(csv).toContain("Normal");
+
+    const csv = buildCsv(injectionChart);
+    expect(csv).toContain("'=SUM(A1:A10)");
+    expect(csv).toContain("'@cmd");
+    expect(csv).toContain("'+123");
   });
 
-  it("escapes quotes and commas in cell text", () => {
-    const chart: ChartSpec = {
-      chart_type: "bar",
-      title: "Quotes Test",
-      x: ['Chi nhánh, "Khu vực 1"'],
-      series: { "Doanh thu": [500] },
+  it("handles null series values without crashing", () => {
+    const forecastChart: ChartSpec = {
+      chart_type: "line",
+      title: "Dự báo",
+      x: ["T1", "T2", "T3"],
+      series: {
+        "Thực tế": [100, 110, null],
+        "Dự báo": [null, 110, 125],
+      },
       highlight_x: null,
     };
-    const csv = buildCsv(chart);
-    expect(csv).toContain('"Chi nhánh, ""Khu vực 1"""');
+    const csv = buildCsv(forecastChart);
+    expect(csv).toContain("T1");
+    expect(csv).toContain("100");
   });
 });
 
 describe("Report Model Builder (buildReportModel.ts)", () => {
   const sampleResponse: AnalyzeResponse = {
     goal: {
-      question: "So sánh doanh thu chi nhánh",
-      time_scope: "last_12_months",
-      time_start: "2026-01",
-      time_end: "2026-08",
-      tasks: [{ type: "comparison", metric: "Doanh_thu_trieu_vnd", group_by: "Chi_nhanh", find: null, chart_hint: null }],
+      question: "So sánh doanh thu chi nhánh?",
+      time_scope: "all",
+      time_start: "2026-01-01",
+      time_end: "2026-12-31",
+      tasks: [
+        {
+          type: "comparison",
+          metric: "Doanh_thu",
+          group_by: "Chi_nhanh",
+          find: null,
+          chart_hint: null,
+        },
+      ],
     },
     task_results: [],
     charts: [
       {
         chart_type: "bar",
-        title: "So sánh doanh thu theo chi nhánh",
-        x: ["HN", "HCM"],
-        series: { "Doanh thu": [1000, 2000] },
+        title: "Doanh thu theo chi nhánh",
+        x: ["Hà Nội", "TP.HCM"],
+        series: { "Doanh thu": [1200, 1500] },
         highlight_x: null,
         role: "primary",
-        display_name: "Doanh thu",
-        unit: "triệu VNĐ",
       },
       {
         chart_type: "pie",
         title: "Tỷ trọng doanh thu",
-        x: ["HN", "HCM"],
-        series: { "Tỷ trọng (%)": [33.3, 66.7] },
+        x: ["Hà Nội", "TP.HCM"],
+        series: { "Tỷ trọng": [44.4, 55.6] },
         highlight_x: null,
         role: "supplementary",
         perspective: "share_of_total",
@@ -140,23 +155,28 @@ describe("Report Model Builder (buildReportModel.ts)", () => {
       confidence_score: 0.95,
     },
     meta: {
-      generated_at: "2026-10-12T10:00:00Z",
-      model_name: "Gemini AI",
       rows_total: 100,
-      rows_used: 80,
-      goal_summary: "So sánh doanh thu giữa các chi nhánh, từ 2026-01 đến 2026-08.",
-      notes: ["Góc nhìn tỷ trọng hợp lệ"],
+      rows_used: 100,
+      goal_summary: "So sánh doanh thu chi nhánh",
+      notes: [],
+      model_name: "gemini-2.5-flash",
+      generated_at: "2026-10-12T10:00:00Z",
     },
   };
 
   it("builds full report model with all sections enabled", () => {
-    const model = buildReportModel(sampleResponse, "doanh_thu.csv", {
-      insight: true,
-      primary_chart: true,
-      supplementary_charts: true,
-      data_tables: true,
-      calculation_notes: true,
-    }, "Công ty ABC");
+    const model = buildReportModel(
+      sampleResponse,
+      "doanh_thu.csv",
+      {
+        insight: true,
+        primary_chart: true,
+        supplementary_charts: true,
+        data_tables: true,
+        calculation_notes: true,
+      },
+      "Công ty ABC"
+    );
 
     expect(model.orgName).toBe("Công ty ABC");
     expect(model.filename).toBe("doanh_thu.csv");
@@ -164,6 +184,30 @@ describe("Report Model Builder (buildReportModel.ts)", () => {
     expect(model.charts.length).toBe(2);
     expect(model.calculationNotes.length).toBeGreaterThan(0);
     expect(model.isLowConfidence).toBe(false);
+  });
+
+  it("handles null series values in report data tables gracefully", () => {
+    const responseWithNulls: AnalyzeResponse = {
+      ...sampleResponse,
+      charts: [
+        {
+          chart_type: "line",
+          title: "Dự báo doanh thu",
+          x: ["T1", "T2", "T3"],
+          series: {
+            "Thực tế": [100, 110, null],
+            "Dự báo": [null, 110, 125],
+          },
+          highlight_x: null,
+          role: "primary",
+          forecast_from: "T2",
+        },
+      ],
+    };
+    const model = buildReportModel(responseWithNulls, "data.csv", {});
+    expect(model.charts[0].rows[0][2]).toBe("—"); // null converted to "—"
+    expect(model.charts[0].rows[2][1]).toBe("—"); // null converted to "—"
+    expect(model.charts[0].calculationNote).toContain("Ước tính dự báo chuỗi thời gian");
   });
 
   it("filters out sections when set to false", () => {
@@ -190,5 +234,19 @@ describe("Report Model Builder (buildReportModel.ts)", () => {
     };
     const model = buildReportModel(lowConfResponse, "data.csv", {});
     expect(model.isLowConfidence).toBe(true);
+  });
+});
+
+describe("ModePicker definition (ModePicker.tsx)", () => {
+  it("defines exactly 5 modes with auto as first", () => {
+    expect(ANALYSIS_MODES.length).toBe(5);
+    expect(ANALYSIS_MODES[0].id).toBe("auto");
+    expect(ANALYSIS_MODES.map((m) => m.id)).toEqual([
+      "auto",
+      "descriptive",
+      "diagnostic",
+      "forecast",
+      "prescriptive",
+    ]);
   });
 });

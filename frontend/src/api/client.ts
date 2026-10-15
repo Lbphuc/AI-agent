@@ -1,66 +1,160 @@
 /**
  * API client – gọi backend FastAPI.
- * Sử dụng fetch (không cần axios) để tránh thêm bundle size.
- * VITE_API_BASE_URL: để trống → dùng proxy Vite (/api/*) khi dev,
- *                    đặt URL thật khi deploy (ví dụ: https://api.example.com).
+ * Sử dụng fetch tiêu chuẩn với AbortSignal để hỗ trợ hủy request đang chạy.
  */
-import type { AnalyzeResponse } from "./types";
+import type {
+  AnalysisGoal,
+  AnalysisLevel,
+  AnalysisMode,
+  AnalyzeResponse,
+  DataProfile,
+  DeepenResponse,
+  InterpretResponse,
+} from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
+async function handleResponseError(res: Response): Promise<never> {
+  let detail = `Lỗi ${res.status}`;
+  try {
+    const json = await res.json();
+    if (typeof json.detail === "string") {
+      detail = json.detail;
+    } else if (Array.isArray(json.detail)) {
+      detail = json.detail.map((d: { msg: string }) => d.msg).join("; ");
+    }
+  } catch {
+    // ignore json error
+  }
+
+  if (res.status === 400) throw new Error(`File không hợp lệ: ${detail}`);
+  if (res.status === 422) throw new Error(`Không phân tích được: ${detail}`);
+  if (res.status === 500) throw new Error(`Lỗi máy chủ (500): ${detail}`);
+  if (res.status === 502)
+    throw new Error(
+      "Backend chưa khởi động hoặc không thể kết nối. Vui lòng kiểm tra cổng 8000."
+    );
+  if (res.status === 503)
+    throw new Error(`Dịch vụ AI đang quá tải hoặc tạm thời hết quota: ${detail}`);
+  throw new Error(detail);
+}
+
 /**
- * Gọi POST /analyze.
- * @param file   File CSV hoặc Excel tải lên
- * @param question Câu hỏi ngôn ngữ tự nhiên
- * @returns AnalyzeResponse từ backend
- * @throws Error có message từ backend (400/422/503) hoặc lỗi mạng
+ * Gọi POST /profile để lấy cấu trúc dữ liệu và khả năng dùng các chế độ phân tích.
+ */
+export async function profileData(
+  file: File,
+  signal?: AbortSignal
+): Promise<DataProfile> {
+  const form = new FormData();
+  form.append("file", file);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/profile`, {
+      method: "POST",
+      body: form,
+      signal,
+    });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") throw err;
+    throw new Error("Không kết nối được backend khi đọc hồ sơ dữ liệu.");
+  }
+
+  if (!res.ok) await handleResponseError(res);
+  return res.json() as Promise<DataProfile>;
+}
+
+/**
+ * Gọi POST /interpret để hiểu câu hỏi và suy ra các cấp độ phân tích (levels).
+ */
+export async function interpretQuestion(
+  file: File,
+  question: string,
+  mode: AnalysisMode = "auto",
+  signal?: AbortSignal
+): Promise<InterpretResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("question", question);
+  form.append("mode", mode);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/interpret`, {
+      method: "POST",
+      body: form,
+      signal,
+    });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") throw err;
+    throw new Error("Không kết nối được backend khi giải nghĩa câu hỏi.");
+  }
+
+  if (!res.ok) await handleResponseError(res);
+  return res.json() as Promise<InterpretResponse>;
+}
+
+/**
+ * Gọi POST /analyze. Nếu đã có goal thì truyền kèm để bỏ qua O2.
  */
 export async function analyzeData(
   file: File,
   question: string,
-  expandViews: boolean = true
+  expandViews: boolean = true,
+  goal?: AnalysisGoal,
+  signal?: AbortSignal
 ): Promise<AnalyzeResponse> {
   const form = new FormData();
   form.append("file", file);
   form.append("question", question);
   form.append("expand_views", String(expandViews));
+  if (goal) {
+    form.append("goal", JSON.stringify(goal));
+  }
 
   let res: Response;
   try {
     res = await fetch(`${BASE}/api/analyze`, {
       method: "POST",
       body: form,
+      signal,
     });
-  } catch {
-    throw new Error(
-      "Không kết nối được backend. Kiểm tra backend đã chạy chưa:\n" +
-      "uvicorn backend.app.main:app --reload --port 8000"
-    );
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") throw err;
+    throw new Error("Không kết nối được backend khi thực hiện phân tích.");
   }
 
-  if (!res.ok) {
-    // FastAPI trả về { detail: "..." } hoặc { detail: [...] }
-    let detail = `Lỗi ${res.status}`;
-    try {
-      const json = await res.json();
-      if (typeof json.detail === "string") {
-        detail = json.detail;
-      } else if (Array.isArray(json.detail)) {
-        // Validation errors từ Pydantic
-        detail = json.detail.map((d: { msg: string }) => d.msg).join("; ");
-      }
-    } catch {
-      // ignore JSON parse error
-    }
-
-    // Map HTTP status → message thân thiện
-    if (res.status === 400) throw new Error(`File không hợp lệ: ${detail}`);
-    if (res.status === 422) throw new Error(`Không phân tích được: ${detail}`);
-    if (res.status === 500) throw new Error(`Lỗi máy chủ (500): ${detail}`);
-    if (res.status === 502) throw new Error(`Backend chưa khởi động hoặc không thể kết nối. Vui lòng chạy: uvicorn backend.app.main:app --reload`);
-    if (res.status === 503) throw new Error(`Dịch vụ AI đang quá tải hoặc tạm thời hết quota: ${detail}`);
-    throw new Error(detail);
-  }
-
+  if (!res.ok) await handleResponseError(res);
   return res.json() as Promise<AnalyzeResponse>;
+}
+
+/**
+ * Gọi POST /deepen để chạy phân tích sâu theo cấp: diagnostic | forecast | prescriptive.
+ */
+export async function deepenAnalysis(
+  file: File,
+  goal: AnalysisGoal,
+  level: AnalysisLevel,
+  signal?: AbortSignal
+): Promise<DeepenResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("goal", JSON.stringify(goal));
+  form.append("level", level);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/deepen`, {
+      method: "POST",
+      body: form,
+      signal,
+    });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") throw err;
+    throw new Error(`Không kết nối được backend khi thực hiện phân tích sâu (${level}).`);
+  }
+
+  if (!res.ok) await handleResponseError(res);
+  return res.json() as Promise<DeepenResponse>;
 }

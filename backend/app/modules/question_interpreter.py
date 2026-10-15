@@ -35,7 +35,16 @@ import typing
 import pandas as pd
 
 from ..llm_client import LLMClient
-from ..schemas import AnalysisGoal, AnalysisTask, ChartHint, DataProfile, FindMode, TaskType, TimeScope
+from ..schemas import (
+    AnalysisGoal,
+    AnalysisLevel,
+    AnalysisTask,
+    ChartHint,
+    DataProfile,
+    FindMode,
+    TaskType,
+    TimeScope,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,45 +73,45 @@ class QuestionInterpretationError(Exception):
 
 FEW_SHOT_EXAMPLES = """Ví dụ 1 (xu hướng theo thời gian):
 Câu hỏi: "Doanh thu thay đổi thế nào theo từng tháng?"
-JSON: {"time_scope": "last_12_months", "tasks": [
+JSON: {"time_scope": "last_12_months", "levels": ["descriptive"], "tasks": [
   {"type": "trend", "metric": "Doanh_thu_trieu_vnd", "group_by": null, "find": null}
 ]}
 
-Ví dụ 2 (so sánh giữa các nhóm):
-Câu hỏi: "So sánh doanh thu giữa các chi nhánh trong 3 tháng gần đây"
-JSON: {"time_scope": "last_3_months", "tasks": [
-  {"type": "comparison", "metric": "Doanh_thu_trieu_vnd", "group_by": "Chi_nhanh", "find": null}
-]}
-
-Ví dụ 3 (tăng/giảm theo nhóm):
-Câu hỏi: "Chi nhánh nào giảm doanh thu mạnh nhất trong năm qua?"
-JSON: {"time_scope": "last_12_months", "tasks": [
+Ví dụ 2 (hỏi nguyên nhân / tại sao):
+Câu hỏi: "Vì sao doanh thu Đà Nẵng giảm trong năm qua?"
+JSON: {"time_scope": "last_12_months", "levels": ["descriptive", "diagnostic"], "tasks": [
   {"type": "growth_rate", "metric": "Doanh_thu_trieu_vnd", "group_by": "Chi_nhanh", "find": "min"}
 ]}
 
-Ví dụ 4 (kết hợp nhiều mục tiêu trong một câu hỏi):
-Câu hỏi: "Phân tích xu hướng doanh thu 12 tháng gần nhất và cho biết chi nhánh nào giảm mạnh nhất."
-JSON: {"time_scope": "last_12_months", "tasks": [
+Ví dụ 3 (hỏi tương lai / dự báo):
+Câu hỏi: "Doanh thu quý tới dự kiến ra sao?"
+JSON: {"time_scope": "last_12_months", "levels": ["descriptive", "forecast"], "tasks": [
+  {"type": "trend", "metric": "Doanh_thu_trieu_vnd", "group_by": null, "find": null}
+]}
+
+Ví dụ 4 (hỏi đề xuất / nên làm gì):
+Câu hỏi: "Nên ưu tiên chi nhánh nào để cải thiện doanh thu?"
+JSON: {"time_scope": "last_12_months", "levels": ["descriptive", "prescriptive"], "tasks": [
+  {"type": "comparison", "metric": "Doanh_thu_trieu_vnd", "group_by": "Chi_nhanh", "find": null}
+]}
+
+Ví dụ 5 (hỏi kết hợp nguyên nhân và dự báo):
+Câu hỏi: "Vì sao Đà Nẵng giảm và tháng tới sẽ ra sao?"
+JSON: {"time_scope": "last_12_months", "levels": ["descriptive", "diagnostic", "forecast"], "tasks": [
   {"type": "trend", "metric": "Doanh_thu_trieu_vnd", "group_by": null, "find": null},
   {"type": "growth_rate", "metric": "Doanh_thu_trieu_vnd", "group_by": "Chi_nhanh", "find": "min"}
 ]}
 
-Ví dụ 5 (khoảng thời gian tùy chỉnh):
+Ví dụ 6 (khoảng thời gian tùy chỉnh):
 Câu hỏi: "Doanh thu từ tháng 1 đến tháng 6 năm nay thế nào?"
-JSON: {"time_scope": "custom", "custom_start": "2026-01", "custom_end": "2026-06", "tasks": [
+JSON: {"time_scope": "custom", "custom_start": "2026-01", "custom_end": "2026-06", "levels": ["descriptive"], "tasks": [
   {"type": "trend", "metric": "Doanh_thu_trieu_vnd", "group_by": null, "find": null}
 ]}
 
-Ví dụ 6 (gợi ý biểu đồ tỷ trọng — chart_hint="pie"):
+Ví dụ 7 (gợi ý biểu đồ tỷ trọng — chart_hint="pie"):
 Câu hỏi: "Doanh thu mỗi chi nhánh chiếm bao nhiêu phần trăm tổng doanh thu?"
-JSON: {"time_scope": "last_12_months", "tasks": [
+JSON: {"time_scope": "last_12_months", "levels": ["descriptive"], "tasks": [
   {"type": "comparison", "metric": "Doanh_thu_trieu_vnd", "group_by": "Chi_nhanh", "find": null, "chart_hint": "pie"}
-]}
-
-Ví dụ 7 (gợi ý biểu đồ nhấn mạnh khối lượng — chart_hint="area"):
-Câu hỏi: "Tổng doanh thu tích lũy qua từng tháng ra sao?"
-JSON: {"time_scope": "last_12_months", "tasks": [
-  {"type": "trend", "metric": "Doanh_thu_trieu_vnd", "group_by": null, "find": null, "chart_hint": "area"}
 ]}"""
 
 
@@ -138,12 +147,17 @@ tính ngày cụ thể. Nếu chọn "custom", thêm 2 trường "custom_start" 
 "custom_end" dạng "YYYY-MM". Nếu câu hỏi không nói rõ khoảng thời
 gian, dùng "last_12_months".
 
+Trường "levels": danh sách các mức phân tích mà câu hỏi đang hỏi (luôn gồm "descriptive"):
+- "diagnostic": hỏi VÌ SAO / do đâu / điều gì kéo tăng–giảm / yếu tố ảnh hưởng
+- "forecast": hỏi TƯƠNG LAI: sắp tới, quý tới, dự báo, dự kiến
+- "prescriptive": hỏi NÊN LÀM GÌ / đề xuất / khuyến nghị / cần ưu tiên gì
+Chỉ thêm khi câu hỏi nói rõ. Nếu chỉ hỏi số liệu hiện tại hoặc câu hỏi chung ("Doanh thu năm nay thế nào?") thì chỉ ["descriptive"].
+
 Ngoài ra, mỗi task có thể thêm trường "chart_hint" (tùy chọn, chỉ 2 giá
 trị): "pie" nếu câu hỏi ngụ ý TỶ TRỌNG/CƠ CẤU của một tổng thể (ví dụ
 "chiếm bao nhiêu phần trăm", "cơ cấu"); "area" nếu câu hỏi nhấn mạnh
 KHỐI LƯỢNG/TÍCH LŨY theo thời gian (ví dụ "tổng tích lũy"). Nếu không
-chắc, để null — KHÔNG được gợi ý "pie" cho loại "growth_rate" (giá trị
-có thể âm, pie không thể hiện được).
+chắc, để null — KHÔNG được gợi ý "pie" cho loại "growth_rate".
 
 {FEW_SHOT_EXAMPLES}
 
@@ -258,13 +272,49 @@ def _parse_and_validate(question: str, raw: dict, profile: DataProfile) -> Analy
 
     tasks = [_validate_task(t, profile) for t in raw_tasks]
 
+    # Phan rã levels
+    raw_levels = raw.get("levels")
+    parsed_levels: list[AnalysisLevel] = ["descriptive"]
+    if isinstance(raw_levels, list):
+        for lvl in raw_levels:
+            if lvl in ("diagnostic", "forecast", "prescriptive") and lvl not in parsed_levels:
+                parsed_levels.append(lvl)
+
+    # Heuristic bo sung neu LLM quen kem levels theo tu khoa ro rang
+    q_lower = question.lower()
+    if any(w in q_lower for w in ["vì sao", "tai sao", "tại sao", "nguyên nhân", "do đâu", "ly do", "lý do"]):
+        if "diagnostic" not in parsed_levels:
+            parsed_levels.append("diagnostic")
+    if any(w in q_lower for w in ["dự báo", "du bao", "dự đoán", "du doan", "quý tới", "tháng tới", "sắp tới", "tương lai", "kỳ tới"]):
+        if "forecast" not in parsed_levels:
+            parsed_levels.append("forecast")
+    if any(w in q_lower for w in ["nên làm gì", "đề xuất", "de xuat", "khuyến nghị", "khuyen nghi", "chiến lược", "chien luoc", "ưu tiên"]):
+        if "prescriptive" not in parsed_levels:
+            parsed_levels.append("prescriptive")
+
     return AnalysisGoal(
         question=question,
         time_scope=time_scope,
         time_start=time_start,
         time_end=time_end,
         tasks=tasks,
+        levels=parsed_levels,
     )
+
+
+def revalidate_goal(goal_input: AnalysisGoal | dict, profile: DataProfile) -> AnalysisGoal:
+    """Validate lại toàn bộ AnalysisGoal gửi từ client với DataProfile mới.
+    Đảm bảo mọi metric, group_by đều có thật, chặn inject cột lạ hoặc task lạ.
+    """
+    if isinstance(goal_input, AnalysisGoal):
+        data = goal_input.model_dump()
+    elif isinstance(goal_input, dict):
+        data = goal_input
+    else:
+        raise ValueError("goal phải là AnalysisGoal hoặc dict.")
+
+    question = str(data.get("question", ""))
+    return _parse_and_validate(question, data, profile)
 
 
 def interpret(question: str, profile: DataProfile, llm: LLMClient) -> AnalysisGoal:

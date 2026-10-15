@@ -190,14 +190,15 @@ class GeminiClient:
                 except Exception as exc:
                     err_str = str(exc).lower()
                     last_exc = exc
-                    # Nếu là lỗi quá tải máy chủ Google (503/UNAVAILABLE) và là lần thử đầu: đợi 1.5s
-                    if any(code in err_str for code in ("503", "unavailable", "overloaded")) and attempt == 0:
-                        _logger.warning("Model %s gặp 503 (quá tải tạm thời). Đợi 1.5s thử lại...", model)
+                    # Nếu là lỗi quá tải (503) hoặc lỗi mạng/disconnect tạm thời và là lần thử đầu: đợi 1.5s thử lại
+                    transient_errors = ("503", "unavailable", "overloaded", "disconnect", "remoteprotocolerror", "connection", "timeout", "reset")
+                    if any(code in err_str for code in transient_errors) and attempt == 0:
+                        _logger.warning("Model %s gặp lỗi tạm thời (%s). Đợi 1.5s thử lại...", model, str(exc)[:80])
                         time.sleep(1.5)
                         continue
 
-                    # Bỏ qua model và chuyển model tiếp theo nếu gặp mã lỗi hạ tầng / quota
-                    skip_codes = ("503", "unavailable", "overloaded", "404", "not_found", "429", "rate", "resource_exhausted", "quota")
+                    # Bỏ qua model và chuyển model tiếp theo nếu gặp mã lỗi hạ tầng / quota / network
+                    skip_codes = ("503", "unavailable", "overloaded", "404", "not_found", "429", "rate", "resource_exhausted", "quota", "disconnect", "remoteprotocolerror", "connection", "timeout", "reset")
                     if any(code in err_str for code in skip_codes):
                         _logger.warning("Model %s lỗi %s, chuyển sang model tiếp theo...", model, str(exc)[:80])
                         time.sleep(0.5)
@@ -207,7 +208,7 @@ class GeminiClient:
 
         # Tat ca models deu loi
         raise Exception(
-            f"Tat ca Gemini models deu khong kha dung (503/429). "
+            f"Tat ca Gemini models deu khong kha dung (503/429/Network). "
             f"Loi cuoi: {last_exc}"
         )
 
@@ -241,11 +242,12 @@ class GeminiClient:
                 except Exception as exc:
                     err_str = str(exc).lower()
                     last_exc = exc
-                    if any(c in err_str for c in ("503", "unavailable", "overloaded")) and attempt == 0:
-                        _logger.warning("complete_text: model %s gap 503, doi 1.5s...", model)
+                    transient_errors = ("503", "unavailable", "overloaded", "disconnect", "remoteprotocolerror", "connection", "timeout", "reset")
+                    if any(c in err_str for c in transient_errors) and attempt == 0:
+                        _logger.warning("complete_text: model %s gap loi tam thoi (%s), doi 1.5s...", model, str(exc)[:80])
                         time.sleep(1.5)
                         continue
-                    skip_codes = ("503", "unavailable", "overloaded", "404", "not_found", "429", "rate", "resource_exhausted", "quota")
+                    skip_codes = ("503", "unavailable", "overloaded", "404", "not_found", "429", "rate", "resource_exhausted", "quota", "disconnect", "remoteprotocolerror", "connection", "timeout", "reset")
                     if any(c in err_str for c in skip_codes):
                         _logger.warning("complete_text: model %s loi, thu model khac...", model)
                         time.sleep(0.5)

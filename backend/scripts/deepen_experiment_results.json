@@ -1,0 +1,21 @@
+{
+  "diagnostic": {
+    "n_seeds": 20,
+    "driver_identification_rate_pct": 100.0,
+    "avg_r_within_series": 0.885,
+    "avg_r_pooled": 0.8944047148662332,
+    "avg_latency_ms": 44.201309999698424
+  },
+  "forecast": {
+    "n_seeds": 20,
+    "avg_backtest_mape_pct": 3.2900000000000005,
+    "empirical_coverage_80_pct": 100.0,
+    "avg_latency_ms": 9.619975000168779
+  },
+  "prescriptive_ablation": {
+    "total_tested": 6,
+    "valid_after_verify": 1,
+    "blocked_hallucinations": 5,
+    "filter_efficiency_pct": 125.0
+  }
+}

@@ -8,6 +8,7 @@ import {
   Pie,
   AreaChart,
   Area,
+  ComposedChart,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -47,12 +48,23 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart }) => {
   const seriesKeys = Object.keys(chart.series || {});
   const isContribution = chart.perspective === "contribution_to_change";
   const isShare = chart.perspective === "share_of_total";
+  const isForecast = !!chart.forecast_from || !!chart.band;
 
-  // Chuẩn hóa dữ liệu cho Recharts
+  // Chuẩn hóa dữ liệu cho Recharts (hỗ trợ Optional/null an toàn)
   const chartData = (chart.x || []).map((xVal, i) => {
-    const pt: Record<string, string | number> = { name: xVal };
+    const pt: Record<string, string | number | null> = { name: xVal };
     for (const k of seriesKeys) {
-      pt[k] = chart.series[k]?.[i] ?? 0;
+      const val = chart.series[k]?.[i];
+      pt[k] = val !== undefined && val !== null ? val : (chart.chart_type === "bar" && !isForecast ? 0 : null);
+    }
+    if (chart.band) {
+      const lower = chart.band.lower?.[i];
+      const upper = chart.band.upper?.[i];
+      if (lower !== undefined && lower !== null && upper !== undefined && upper !== null) {
+        pt._band_lower = lower;
+        pt._band_range = Math.max(0, upper - lower);
+        pt._band_upper = upper;
+      }
     }
     return pt;
   });
@@ -63,7 +75,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart }) => {
     setMenuOpen(false);
     try {
       await exportChartToPng(cardRef.current, chart.title);
-    } catch (err) {
+    } catch {
       alert("Không thể xuất ảnh PNG. Vui lòng thử lại.");
     } finally {
       setIsExportingPng(false);
@@ -84,6 +96,18 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart }) => {
           <div className="chart-card-subtitle">
             {chart.unit && <span className="chart-unit-badge">Đơn vị: {chart.unit}</span>}
             {chart.role === "primary" && <span className="chart-role-badge">Biểu đồ chính</span>}
+            {isForecast && (
+              <span
+                className="chart-role-badge"
+                style={{
+                  background: "rgba(245, 158, 11, 0.12)",
+                  color: "#d97706",
+                  borderColor: "rgba(245, 158, 11, 0.3)",
+                }}
+              >
+                Ước tính dự báo
+              </span>
+            )}
           </div>
         </div>
 
@@ -114,14 +138,6 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart }) => {
                 </svg>
                 Tải bảng CSV
               </button>
-              <button className="dropdown-item soon" disabled title="Tính năng sắp có">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="20" x2="18" y2="10" />
-                  <line x1="12" y1="20" x2="12" y2="4" />
-                  <line x1="6" y1="20" x2="6" y2="14" />
-                </svg>
-                Đổi loại biểu đồ (Sắp có)
-              </button>
             </div>
           )}
         </div>
@@ -130,7 +146,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart }) => {
       {/* Vùng vẽ biểu đồ */}
       <div className="chart-canvas-wrapper">
         <ResponsiveContainer width="100%" height={300}>
-          {renderChartByType(chart, chartData, seriesKeys, isContribution, isShare)}
+          {renderChartByType(chart, chartData, seriesKeys, isContribution, isShare, isForecast)}
         </ResponsiveContainer>
       </div>
 
@@ -147,10 +163,11 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart }) => {
 
 function renderChartByType(
   chart: ChartSpec,
-  data: Record<string, string | number>[],
+  data: Record<string, any>[],
   seriesKeys: string[],
   isContribution: boolean,
-  isShare: boolean
+  isShare: boolean,
+  isForecast: boolean
 ) {
   if (chart.chart_type === "pie" || isShare) {
     const pieData = (chart.x || []).map((name, i) => ({
@@ -180,6 +197,82 @@ function renderChartByType(
           ))}
         </Pie>
       </PieChart>
+    );
+  }
+
+  // ComposedChart / Forecast chart
+  if (isForecast) {
+    return (
+      <ComposedChart data={data} accessibilityLayer={false} margin={{ top: 12, right: 16, left: 16, bottom: 25 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+        <XAxis
+          dataKey="name"
+          tickFormatter={formatAxisDate}
+          stroke="var(--text-secondary)"
+          interval="preserveStartEnd"
+          minTickGap={24}
+          padding={{ left: 12, right: 12 }}
+        />
+        <YAxis stroke="var(--text-secondary)" tickFormatter={(v) => formatNumber(v)} />
+        <Tooltip content={<CustomChartTooltip unit={chart.unit} />} />
+        <Legend />
+
+        {chart.band && (
+          <>
+            <Area
+              type="monotone"
+              dataKey="_band_lower"
+              stackId="band_stack"
+              fill="transparent"
+              stroke="none"
+              legendType="none"
+              tooltipType="none"
+              connectNulls={false}
+            />
+            <Area
+              type="monotone"
+              dataKey="_band_range"
+              stackId="band_stack"
+              fill="var(--chart-2)"
+              fillOpacity={0.16}
+              stroke="none"
+              name="Dải tin cậy 80%"
+              connectNulls={false}
+            />
+          </>
+        )}
+
+        {seriesKeys.map((k, i) => {
+          const isForecastKey = k.toLowerCase().includes("dự báo") || k.toLowerCase().includes("forecast");
+          return (
+            <Line
+              key={k}
+              type="monotone"
+              dataKey={k}
+              name={chart.display_name && seriesKeys.length === 1 ? chart.display_name : k}
+              stroke={isForecastKey ? "var(--chart-2)" : PALETTE[i % PALETTE.length]}
+              strokeWidth={isForecastKey ? 2.5 : 2}
+              strokeDasharray={isForecastKey ? "5 5" : undefined}
+              dot={{ r: isForecastKey ? 4 : 3 }}
+              connectNulls={false}
+            />
+          );
+        })}
+
+        {chart.forecast_from && (
+          <ReferenceLine
+            x={chart.forecast_from}
+            stroke="var(--text-muted)"
+            strokeDasharray="3 3"
+            label={{
+              value: "Dự báo",
+              position: "top",
+              fill: "var(--text-muted)",
+              fontSize: 11,
+            }}
+          />
+        )}
+      </ComposedChart>
     );
   }
 
@@ -305,11 +398,15 @@ function CustomChartTooltip({
 }) {
   if (!active || !payload || !payload.length) return null;
 
+  const validPayload = payload.filter((item) => !String(item.dataKey || "").startsWith("_band"));
+  if (!validPayload.length) return null;
+
   return (
     <div className="custom-chart-tooltip">
       <div className="tooltip-title">{label}</div>
       <div className="tooltip-items">
-        {payload.map((item, idx) => {
+        {validPayload.map((item, idx) => {
+          if (item.value === null || item.value === undefined) return null;
           const val = Number(item.value);
           let formattedValue = formatNumber(val);
 
@@ -326,7 +423,16 @@ function CustomChartTooltip({
             <div key={idx} className="tooltip-item">
               <span className="tooltip-dot" style={{ backgroundColor: item.color }} />
               <span className="tooltip-name">{item.name}:</span>
-              <span className="tooltip-val" style={{ color: isContribution ? (val >= 0 ? "var(--pos)" : "var(--neg)") : "var(--text-primary)" }}>
+              <span
+                className="tooltip-val"
+                style={{
+                  color: isContribution
+                    ? val >= 0
+                      ? "var(--pos)"
+                      : "var(--neg)"
+                    : "var(--text-primary)",
+                }}
+              >
                 {formattedValue}
               </span>
             </div>
