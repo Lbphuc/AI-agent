@@ -6,6 +6,7 @@ cd /home/phuc/ai-agent-app
 
 echo "=== [2/2] Keo image moi va khoi chay container ==="
 docker compose pull
-OPENAI_API_KEY="$OPENAI_API_KEY" docker compose up -d
+docker rm -f ai-agent-app 2>/dev/null || true
+OPENAI_API_KEY="$OPENAI_API_KEY" docker compose up -d --force-recreate
 
 echo "Deploy thanh cong!"
