@@ -6,7 +6,7 @@ pipeline {
     }
 
     environment {
-        // Gắn BUILD_NUMBER vào tag image thay vì dùng cố định latest
+        // Gắn BUILD_NUMBER vào tag image thay vì dùng cố định latest .
         IMAGE_NAME = "34.21.186.237:5050/root/ai-agent:${BUILD_NUMBER}"
         GEMINI_API_KEY = credentials('GEMINI_API_KEY')
         GITLAB_TOKEN = credentials('gitlab-token')
