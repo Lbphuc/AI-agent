@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { DeepenResponse, AnalysisLevel } from "../api/types";
+import type { DeepenResponse, AnalysisLevel, ChartSpec, ChartOption } from "../api/types";
 import { ChartCard } from "./ChartCard";
 import { RecommendationList } from "./RecommendationCard";
 
@@ -8,6 +8,8 @@ interface DeepenSectionProps {
   data?: DeepenResponse;
   loading?: boolean;
   onRetry?: () => void;
+  onSwitchChart?: (chart: ChartSpec, option: ChartOption) => void;
+  onResetToAuto?: (chart: ChartSpec) => void;
 }
 
 const LEVEL_TITLES: Record<AnalysisLevel, { title: string; badge: string; badgeClass: string }> = {
@@ -38,6 +40,8 @@ export const DeepenSection: React.FC<DeepenSectionProps> = ({
   data,
   loading = false,
   onRetry,
+  onSwitchChart,
+  onResetToAuto,
 }) => {
   const [showBases, setShowBases] = useState(false);
   const info = LEVEL_TITLES[level] || LEVEL_TITLES.diagnostic;
@@ -48,16 +52,12 @@ export const DeepenSection: React.FC<DeepenSectionProps> = ({
         <div className="deepen-section-header">
           <div className="deepen-section-title-group">
             <h3 className="deepen-section-title">{info.title}</h3>
-            <span className={`deepen-section-badge ${info.badgeClass}`}>{info.badge}</span>
+            <span className={`section-badge ${info.badgeClass}`}>{info.badge}</span>
           </div>
         </div>
-        <div className="loading-card" style={{ padding: "16px", border: "none" }}>
-          <div className="loading-steps">
-            <div className="loading-step">
-              <div className="loading-step-dot" />
-              <span>Đang tính toán các chỉ số chuyên sâu và tổng hợp căn cứ...</span>
-            </div>
-          </div>
+        <div className="section-loading">
+          <div className="spinner" />
+          <span>Đang bóc tách số liệu chuyên sâu ({info.badge})...</span>
         </div>
       </div>
     );
@@ -65,17 +65,21 @@ export const DeepenSection: React.FC<DeepenSectionProps> = ({
 
   if (!data) return null;
 
-  // Thu thập toàn bộ biểu đồ trong các sections của DeepenResponse
-  const allCharts = (data.sections || []).flatMap((s) => s.charts || []);
-  const baseSections = (data.sections || []).filter((s) => s.level !== "prescriptive");
-  const mainSection = (data.sections || []).find((s) => s.level === level) || data.sections?.[0];
+  // Lấy section chính và căn cứ (nếu là prescriptive)
+  const mainSection = data.sections?.[0];
+  const allCharts = data.sections?.flatMap((s) => s.charts || []) || [];
+  const baseSections = data.sections?.filter((s) => s.level !== "prescriptive") || [];
 
   return (
     <div className="deepen-section-card" role="region" aria-label={info.title}>
+      {/* Header cấp phân tích */}
       <div className="deepen-section-header">
         <div className="deepen-section-title-group">
           <h3 className="deepen-section-title">{info.title}</h3>
-          <span className={`deepen-section-badge ${info.badgeClass}`}>{info.badge}</span>
+          <span className={`section-badge ${info.badgeClass}`}>{info.badge}</span>
+          {data.meta?.computed_in_sec && (
+            <span className="section-time">({data.meta.computed_in_sec}s)</span>
+          )}
         </div>
         {onRetry && (
           <button type="button" className="section-retry-btn" onClick={onRetry}>
@@ -139,7 +143,12 @@ export const DeepenSection: React.FC<DeepenSectionProps> = ({
                       )}
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "12px" }}>
                         {(sec.charts || []).map((chart, cIdx) => (
-                          <ChartCard key={cIdx} chart={chart} />
+                          <ChartCard
+                            key={cIdx}
+                            chart={chart}
+                            onSwitchChart={onSwitchChart}
+                            onResetToAuto={onResetToAuto}
+                          />
                         ))}
                       </div>
                     </div>
@@ -155,7 +164,12 @@ export const DeepenSection: React.FC<DeepenSectionProps> = ({
       {level !== "prescriptive" && allCharts.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
           {allCharts.map((chart, idx) => (
-            <ChartCard key={idx} chart={chart} />
+            <ChartCard
+              key={idx}
+              chart={chart}
+              onSwitchChart={onSwitchChart}
+              onResetToAuto={onResetToAuto}
+            />
           ))}
         </div>
       )}

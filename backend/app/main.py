@@ -13,9 +13,23 @@ import io
 import json
 import logging
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
+from typing import Optional
+
+# Dam bao terminal Windows khong bi loi charmap khi in log/ky tu dac biet
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -40,6 +54,8 @@ from .modules import (
     insight_generator,
     perspective_planner,
     question_interpreter,
+    chart_rules,
+    chart_fitness,
 )
 from .modules.business_terms import resolve_column_display
 from .schemas import (
@@ -48,16 +64,58 @@ from .schemas import (
     AnalysisMode,
     AnalyzeResponse,
     ChartSpec,
+    ChartType,
+    ChartVerdict,
     DataProfile,
     DeepenResponse,
     ExportXlsxRequest,
     InterpretResponse,
     ModeAvailability,
+    Reason,
     ReportMeta,
     TaskResult,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_ack(ack_input: str | None) -> set[str]:
+    """Parse chuoi ack tu client thanh tap hop cac ma ly do da xac nhan."""
+    if not ack_input:
+        return set()
+    s = ack_input.strip()
+    if s.startswith("[") and s.endswith("]"):
+        try:
+            items = json.loads(s)
+            return {str(x) for x in items}
+        except Exception:
+            pass
+    return {x.strip() for x in s.split(",") if x.strip()}
+
+
+def _parse_chart_prefs(chart_pref: Optional[ChartType], chart_prefs: Optional[str]) -> list[ChartType]:
+    """Parse ca chart_pref don le va chart_prefs danh sach tu client."""
+    res: list[ChartType] = []
+    if chart_prefs:
+        s = chart_prefs.strip()
+        if s.startswith("[") and s.endswith("]"):
+            try:
+                items = json.loads(s)
+                if isinstance(items, list):
+                    for x in items:
+                        if x in chart_fitness.CHART_DISPLAY_NAMES and x not in res:
+                            res.append(x)
+            except Exception:
+                pass
+        if not res:
+            for item in s.split(","):
+                item_s = item.strip()
+                if item_s in chart_fitness.CHART_DISPLAY_NAMES and item_s not in res:
+                    res.append(item_s)  # type: ignore[arg-type]
+    if chart_pref and chart_pref in chart_fitness.CHART_DISPLAY_NAMES and chart_pref not in res:
+        res.insert(0, chart_pref)
+    return res
+
 
 FEATURE_DEEPEN: set[str] = {
     s.strip()
@@ -277,6 +335,7 @@ async def profile_csv(file: UploadFile = File(...)) -> DataProfile:
     profile.availability = avail
     profile.frequency = freq
     profile.n_periods = n_per
+    profile.chart_catalog = chart_rules.build_chart_catalog(profile)
     return profile
 
 
@@ -304,6 +363,7 @@ async def profile_many(files: list[UploadFile] = File(...)) -> dict[str, DataPro
         prof.availability = avail
         prof.frequency = freq
         prof.n_periods = n_per
+        prof.chart_catalog = chart_rules.build_chart_catalog(prof)
         result[f.filename or "unnamed"] = prof
     return result
 
@@ -314,6 +374,9 @@ async def interpret_question(
     file: UploadFile = File(...),
     question: str = Form(...),
     mode: AnalysisMode = Form("auto"),
+    chart_pref: Optional[ChartType] = Form(None),
+    chart_prefs: Optional[str] = Form(None),
+    ack: Optional[str] = Form(None),
 ) -> InterpretResponse:
     """Endpoint Tuan 3 + Mode Pills: chay O1 + O2 va hop nhat levels theo che do phan tich."""
     df = await _read_uploaded_file(file)
@@ -351,11 +414,56 @@ async def interpret_question(
     final_levels, notices = analytics.resolve_levels(mode, goal.levels, avail)
     goal_summary = _generate_goal_summary(goal)
 
+    chart_check: Optional[ChartVerdict] = None
+    all_prefs = _parse_chart_prefs(chart_pref, chart_prefs)
+    if all_prefs:
+        # Bieu do do nguoi dung chon duoc ap dung o /analyze (cap descriptive)
+        # va o /deepen cua cap trung voi mode da chon -> phai tham dinh ca hai cap
+        # de mot lan xac nhan bao phu toan bo luot phan tich.
+        check_levels: list[str] = ["descriptive"]
+        if mode != "auto" and mode != "descriptive":
+            check_levels.append(mode)
+        ctx = chart_rules.extract_chart_context(
+            profile,
+            task=goal.tasks[0] if goal.tasks else None,
+            df=df,
+        )
+        ack_set = _parse_ack(ack)
+
+        merged_reasons: dict[str, Reason] = {}
+        merged_alts: list[ChartType] = []
+        first_bad: Optional[ChartType] = None
+        any_blocked = False
+        for lvl in check_levels:
+            for p in all_prefs:
+                verdict = chart_rules.check_chart_choice(lvl, p, ctx, ack=ack_set)  # type: ignore[arg-type]
+                if verdict.status == "ok":
+                    continue
+                first_bad = first_bad or p
+                any_blocked = any_blocked or verdict.status == "blocked"
+                for r in verdict.reasons:
+                    if r.severity in ("block", "confirm") and r.code not in merged_reasons:
+                        merged_reasons[r.code] = r
+                for a in verdict.alternatives:
+                    if a not in merged_alts and a not in all_prefs:
+                        merged_alts.append(a)
+
+        if first_bad is not None:
+            chart_check = ChartVerdict(
+                status="blocked" if any_blocked else "confirm",
+                chart_type=first_bad,
+                reasons=list(merged_reasons.values()),
+                alternatives=merged_alts,
+                requires_double_confirm=any_blocked,
+                confirm_step=1,
+            )
+
     return InterpretResponse(
         goal=goal,
         levels=final_levels,
         notices=notices,
         goal_summary=goal_summary,
+        chart_check=chart_check,
     )
 
 
@@ -395,6 +503,9 @@ async def analyze(
     question: str = Form(...),
     expand_views: bool = Form(True),
     goal: str | None = Form(None),
+    chart_pref: Optional[ChartType] = Form(None),
+    chart_prefs: Optional[str] = Form(None),
+    ack: Optional[str] = Form(None),
 ) -> AnalyzeResponse:
     """Endpoint chinh cua he thong (FR-01 den FR-09) — Pipeline end-to-end.
 
@@ -442,6 +553,40 @@ async def analyze(
                 status_code=422, detail=f"Không hiểu được câu hỏi: {exc}"
             ) from exc
 
+    # Kiem tra bieu do tuy chon tu nguoi dung (Chart Arbitration)
+    confirmed_notes: list[str] = []
+    notes_by_pref: dict[str, list[str]] = {}
+    all_prefs = _parse_chart_prefs(chart_pref, chart_prefs)
+    if all_prefs:
+        ctx = chart_rules.extract_chart_context(
+            profile,
+            task=analysis_goal.tasks[0] if analysis_goal.tasks else None,
+            df=df,
+        )
+        ack_set = _parse_ack(ack)
+        for p in all_prefs:
+            verdict = chart_rules.check_chart_choice("descriptive", p, ctx, ack=ack_set)
+            if verdict.status == "blocked":
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "message": f"Biểu đồ {chart_fitness.CHART_DISPLAY_NAMES.get(p, p)} cần xác nhận lần 2 trước khi tiếp tục.",
+                        "verdict": verdict.model_dump(),
+                    },
+                )
+            if verdict.status == "confirm":
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "message": f"Biểu đồ {chart_fitness.CHART_DISPLAY_NAMES.get(p, p)} cần xác nhận trước khi tiếp tục.",
+                        "verdict": verdict.model_dump(),
+                    },
+                )
+            p_notes = [r.message for r in verdict.reasons if r.severity in ("confirm", "info")]
+            if p_notes:
+                notes_by_pref[p] = p_notes
+                confirmed_notes.extend(p_notes)
+
     print(f"\n🚀 [1/3] Bắt đầu phân tích: \"{question}\" | Số tác vụ: {len(analysis_goal.tasks)}", flush=True)
 
     # O3: chay tung task, loi tung phan khong chan nhau
@@ -454,7 +599,15 @@ async def analyze(
         task_results.append(TaskResult(task=task, execution=exec_result))
 
     # O4: sinh ChartSpec chinh (tat dinh, khong LLM)
-    primary_charts = await run_in_threadpool(chart_generator.generate_charts, task_results)
+    primary_charts = await run_in_threadpool(
+        chart_generator.generate_charts,
+        task_results,
+        chart_prefs=all_prefs,
+        level="descriptive",
+        profile=profile,
+        confirmed_notes=confirmed_notes,
+        confirmed_notes_by_pref=notes_by_pref,
+    )
 
     # Perspective Planner: sinh cac goc nhin bo sung (tat dinh, khong LLM)
     supplementary_charts: list[ChartSpec] = []
@@ -473,7 +626,43 @@ async def analyze(
         except Exception as exc:  # noqa: BLE001
             logger.warning("Loi khi sinh goc nhin bo sung: %s", exc)
 
-    charts = primary_charts + supplementary_charts
+    # Khử trùng lặp giữa primary_charts và supplementary_charts (tránh vẽ lặp 2 lần)
+    import re
+    seen_titles: set[str] = set()
+    primary_has_pie = any(c.chart_type == "pie" for c in primary_charts)
+    primary_has_trend = any(
+        c.chart_type in ("line", "area") and any(w in c.title.lower() for w in ("diễn biến", "xu hướng"))
+        for c in primary_charts
+    )
+    primary_has_contrib = any(
+        "đóng góp" in c.title.lower() or c.perspective == "contribution_to_change"
+        for c in primary_charts
+    )
+
+    def _clean_title(t: str) -> str:
+        return re.sub(r"\s*\(.*?\)\s*$", "", t).strip().lower()
+
+    for c in primary_charts:
+        seen_titles.add(_clean_title(c.title))
+        seen_titles.add(c.title.strip().lower())
+
+    filtered_supplementary: list[ChartSpec] = []
+    for sc in supplementary_charts:
+        raw_t = sc.title.strip().lower()
+        clean_t = _clean_title(sc.title)
+        if raw_t in seen_titles or clean_t in seen_titles:
+            continue
+        if sc.perspective == "share_of_total" and primary_has_pie:
+            continue
+        if sc.perspective == "trend_by_group" and primary_has_trend:
+            continue
+        if sc.perspective == "contribution_to_change" and primary_has_contrib:
+            continue
+        seen_titles.add(raw_t)
+        seen_titles.add(clean_t)
+        filtered_supplementary.append(sc)
+
+    charts = primary_charts + filtered_supplementary
     print(f"📊 [3/3] O4: Đã tạo {len(charts)} biểu đồ. Đang viết nhận xét AI (O5)...", flush=True)
 
     # O5: sinh insight (goi LLM), loi khong chan toan bo response
@@ -504,13 +693,14 @@ async def analyze(
 
     avail_map, _, _ = analytics.compute_availability(df, profile)
 
+    report_notes: list[str] = list(confirmed_notes)
     report_meta = ReportMeta(
         generated_at=datetime.now(timezone.utc).isoformat(),
         model_name=getattr(llm, "model_name", "AI Model"),
         rows_total=rows_total,
         rows_used=rows_used,
         goal_summary=_generate_goal_summary(analysis_goal),
-        notes=[],
+        notes=report_notes,
         deepen=avail_map,
     )
 
@@ -529,6 +719,9 @@ async def deepen_analysis(
     file: UploadFile = File(...),
     goal: str = Form(...),
     level: AnalysisLevel = Form(...),
+    chart_pref: Optional[ChartType] = Form(None),
+    chart_prefs: Optional[str] = Form(None),
+    ack: Optional[str] = Form(None),
 ) -> DeepenResponse:
     """Endpoint chay phan tich sau theo tung cap: diagnostic | forecast | prescriptive.
 
@@ -562,6 +755,40 @@ async def deepen_analysis(
             warnings=[reason],
         )
 
+    # Kiem tra chart_prefs cho cap phan tich sau
+    confirmed_notes: list[str] = []
+    notes_by_pref: dict[str, list[str]] = {}
+    all_prefs = _parse_chart_prefs(chart_pref, chart_prefs)
+    if all_prefs:
+        ctx = chart_rules.extract_chart_context(
+            profile,
+            task=validated_goal.tasks[0] if validated_goal.tasks else None,
+            df=df,
+        )
+        ack_set = _parse_ack(ack)
+        for p in all_prefs:
+            verdict = chart_rules.check_chart_choice(level, p, ctx, ack=ack_set)
+            if verdict.status == "blocked":
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "message": f"Biểu đồ {chart_fitness.CHART_DISPLAY_NAMES.get(p, p)} cần xác nhận lần 2 trước khi áp dụng cho cấp {level}.",
+                        "verdict": verdict.model_dump(),
+                    },
+                )
+            if verdict.status == "confirm":
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "message": f"Biểu đồ {chart_fitness.CHART_DISPLAY_NAMES.get(p, p)} cần xác nhận trước khi tiếp tục.",
+                        "verdict": verdict.model_dump(),
+                    },
+                )
+            p_notes = [r.message for r in verdict.reasons if r.severity in ("confirm", "info")]
+            if p_notes:
+                notes_by_pref[p] = p_notes
+                confirmed_notes.extend(p_notes)
+
     print(f"📈 [DEEPEN] Đang tính toán chuyên sâu cấp: {level.upper()}...", flush=True)
     llm = GeminiClient()
     try:
@@ -569,6 +796,31 @@ async def deepen_analysis(
             section, facts = await run_in_threadpool(
                 analytics.run_diagnostic, df, profile, validated_goal, llm
             )
+            if all_prefs and section.charts:
+                base_chart = section.charts[0]
+                new_charts = []
+                for p in all_prefs:
+                    c = base_chart.model_copy(deep=True)
+                    c.chart_type = p
+                    c.selection = "user"
+                    c.data_shape = chart_fitness.CHART_DATA_SHAPE.get(p, "category_series")
+                    if len(all_prefs) > 1:
+                        c.title = f"{c.title} ({chart_fitness.CHART_DISPLAY_NAMES.get(p, p)})"
+                    
+                    # Chỉ gán ghi chú liên quan đến biểu đồ này
+                    p_notes = notes_by_pref.get(p, [])
+                    for n in p_notes:
+                        if n not in c.notes:
+                            c.notes.append(n)
+                    
+                    disp = chart_fitness.CHART_DISPLAY_NAMES.get(p, p)
+                    if not any(f"Biểu đồ do bạn chọn: {disp}" in n for n in c.notes):
+                        c.notes.insert(0, f"Biểu đồ do bạn chọn: {disp}")
+
+                    # Bổ sung cấu trúc dữ liệu đặc thù (heatmap_matrix, box_data, ...)
+                    c = chart_generator.enrich_chart_spec(c)
+                    new_charts.append(c)
+                section.charts = new_charts
             print("✅ [DEEPEN] Hoàn tất chẩn đoán (Diagnostic)", flush=True)
             return DeepenResponse(
                 level="diagnostic",
@@ -580,6 +832,29 @@ async def deepen_analysis(
             section, facts = await run_in_threadpool(
                 analytics.run_forecast, df, profile, validated_goal, 3, llm
             )
+            if all_prefs and section.charts:
+                base_chart = section.charts[0]
+                new_charts = []
+                for p in all_prefs:
+                    c = base_chart.model_copy(deep=True)
+                    c.chart_type = p
+                    c.selection = "user"
+                    c.data_shape = chart_fitness.CHART_DATA_SHAPE.get(p, "category_series")
+                    if len(all_prefs) > 1:
+                        c.title = f"{c.title} ({chart_fitness.CHART_DISPLAY_NAMES.get(p, p)})"
+                    
+                    p_notes = notes_by_pref.get(p, [])
+                    for n in p_notes:
+                        if n not in c.notes:
+                            c.notes.append(n)
+                    
+                    disp = chart_fitness.CHART_DISPLAY_NAMES.get(p, p)
+                    if not any(f"Biểu đồ do bạn chọn: {disp}" in n for n in c.notes):
+                        c.notes.insert(0, f"Biểu đồ do bạn chọn: {disp}")
+
+                    c = chart_generator.enrich_chart_spec(c)
+                    new_charts.append(c)
+                section.charts = new_charts
             print("✅ [DEEPEN] Hoàn tất dự báo (Forecast)", flush=True)
             return DeepenResponse(
                 level="forecast",
@@ -602,6 +877,73 @@ async def deepen_analysis(
             sections=[],
             warnings=[f"Đã xảy ra lỗi khi phân tích ({type(exc).__name__}): {exc}"],
         )
+
+
+@app.post("/render", response_model=ChartSpec)
+@app.post("/api/render", response_model=ChartSpec, include_in_schema=False)
+async def render_chart(
+    file: UploadFile = File(...),
+    goal: str = Form(...),
+    level: AnalysisLevel = Form("descriptive"),
+    chart_type: ChartType = Form(...),
+    ack: Optional[str] = Form(None),
+) -> ChartSpec:
+    """Chuyen doi bieu do sang loai bieu do khac (tat dinh, stateless, khong LLM).
+
+    Dung khi nguoi dung chon doi bieu do khac data_shape tren the bieu do (menu ⋯).
+    """
+    df = await _read_uploaded_file(file)
+    profile = await run_in_threadpool(data_profiler.profile, df)
+
+    try:
+        goal_dict = json.loads(goal) if isinstance(goal, str) else goal
+        validated_goal = question_interpreter.revalidate_goal(goal_dict, profile)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Goal khong hop le: {exc}") from exc
+
+    if not validated_goal.tasks:
+        raise HTTPException(status_code=422, detail="Goal khong co task nao.")
+
+    task = validated_goal.tasks[0]
+    ctx = chart_rules.extract_chart_context(profile, task=task, df=df)
+    ack_set = _parse_ack(ack)
+    verdict = chart_rules.check_chart_choice(level, chart_type, ctx, ack=ack_set)
+
+    if verdict.status == "blocked":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": f"Biểu đồ {chart_fitness.CHART_DISPLAY_NAMES.get(chart_type, chart_type)} bị chặn cho dữ liệu hoặc chiến lược này.",
+                "verdict": verdict.model_dump(),
+            },
+        )
+    if verdict.status == "confirm":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": f"Biểu đồ {chart_fitness.CHART_DISPLAY_NAMES.get(chart_type, chart_type)} cần xác nhận trước khi tiếp tục.",
+                "verdict": verdict.model_dump(),
+            },
+        )
+
+    llm = GeminiClient()
+    exec_result = await run_in_threadpool(
+        analysis_runner.run_task, task, validated_goal, profile, df, llm
+    )
+    tr = TaskResult(task=task, execution=exec_result)
+
+    confirmed_notes = [r.message for r in verdict.reasons if r.severity in ("confirm", "info")]
+    charts = chart_generator.generate_charts(
+        [tr],
+        chart_pref=chart_type,
+        level=level,
+        profile=profile,
+        confirmed_notes=confirmed_notes,
+    )
+    if not charts:
+        raise HTTPException(status_code=422, detail="Không thể tạo biểu đồ cho loại đã chọn.")
+
+    return charts[0]
 
 
 def _generate_goal_summary(goal: AnalysisGoal) -> str:

@@ -62,6 +62,7 @@ class DataProfile(BaseModel):
     frequency: Optional[str] = None
     n_periods: Optional[int] = None
     availability: dict[str, ModeAvailability] = Field(default_factory=dict)
+    chart_catalog: Optional[dict[str, list[dict]]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -149,13 +150,63 @@ class ExecutionResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# O4 - Chart Generator
+# O4 - Chart Generator & Chart Fitness / Arbitration
 # ---------------------------------------------------------------------------
 
-# Tuan 5: Chot Literal ban dau chi 2 loai (line, bar).
-# Tuan 8 (Tier 1): Mo rong len 5 loai de ho tro them area, bar_horizontal,
-# pie — xem docs/ARCHITECTURE.md muc "Triet ly tach goi y ngu nghia".
-ChartType = Literal["line", "area", "bar", "bar_horizontal", "pie"]
+# Mo rong 12 loai bieu do theo ma tran muc phu hop
+ChartType = Literal[
+    "kpi",
+    "line",
+    "area",
+    "bar",
+    "bar_horizontal",
+    "pie",
+    "stacked_bar",
+    "waterfall",
+    "scatter",
+    "heatmap",
+    "box",
+    "histogram",
+]
+
+DataShape = Literal[
+    "kpi",
+    "category_series",
+    "waterfall",
+    "points",
+    "matrix",
+    "boxes",
+    "bins",
+]
+
+
+class Reason(BaseModel):
+    """Mot ly do ve muc do phu hop cua bieu do voi du lieu / chien luoc."""
+
+    code: str
+    severity: Literal["block", "confirm", "info"]
+    message: str  # tieng Viet don gian, ro rang
+    suggest: list[ChartType] = Field(default_factory=list)  # bieu do thay the de xuat
+
+
+class ChartVerdict(BaseModel):
+    """Ket luan tham dinh lua chon bieu do tu nguoi dung."""
+
+    status: Literal["ok", "confirm", "blocked"]
+    chart_type: ChartType
+    reasons: list[Reason] = Field(default_factory=list)
+    alternatives: list[ChartType] = Field(default_factory=list)
+    requires_double_confirm: bool = False  # True neu la bieu do "khong ap dung" can xac nhan 2 lan
+    confirm_step: int = 1  # 1 neu chua xac nhan buoc nao, 2 neu da xac nhan buoc 1 dang can buoc 2
+
+
+class ChartOption(BaseModel):
+    """Tuy chon bieu do co the chuyen doi tren the bieu do (menu ⋯)."""
+
+    chart_type: ChartType
+    verdict: Literal["recommended", "ok", "confirm", "blocked"]
+    reasons: list[Reason] = Field(default_factory=list)
+    requires_fetch: bool = False  # khac data_shape -> can goi /render
 
 
 Perspective = Literal[
@@ -179,8 +230,8 @@ class ChartSpec(BaseModel):
 
     chart_type: ChartType
     title: str
-    x: list[str]
-    series: dict[str, list[Optional[float]]]  # {ten_chuoi: [gia_tri...]} - cho phep None cho du bao
+    x: list[str] = Field(default_factory=list)
+    series: dict[str, list[Optional[float]]] = Field(default_factory=dict)  # {ten_chuoi: [gia_tri...]}
     highlight_x: Optional[str] = None  # category can to noi bat (neu co)
     # --- Mo rong tu De xuat Dashboard da goc nhin (deu optional -> khong pha test cu) ---
     role: Literal["primary", "supplementary"] = "primary"
@@ -193,6 +244,21 @@ class ChartSpec(BaseModel):
     # --- Mo rong cho du bao (Forecast) ---
     band: Optional[dict[str, list[Optional[float]]]] = None  # {"lower": [...], "upper": [...]}
     forecast_from: Optional[str] = None  # nhan x noi bat dau du bao
+    # --- Mo rong cho lua chon bieu do tuy y (Chart Arbitration) ---
+    data_shape: DataShape = "category_series"
+    selection: Literal["auto", "user"] = "auto"
+    notes: list[str] = Field(default_factory=list)
+    options: list[ChartOption] = Field(default_factory=list)
+    # --- Du lieu rieng cho hinh dang dac thu (kpi, waterfall, points, matrix, boxes, bins) ---
+    kpi_value: Optional[float] = None
+    kpi_delta: Optional[float] = None
+    kpi_delta_pct: Optional[float] = None
+    kpi_period: Optional[str] = None
+    waterfall_steps: Optional[list[dict]] = None
+    scatter_points: Optional[list[dict]] = None
+    heatmap_matrix: Optional[dict] = None
+    box_data: Optional[list[dict]] = None
+    histogram_bins: Optional[list[dict]] = None
 
 
 class TaskResult(BaseModel):
@@ -331,3 +397,4 @@ class InterpretResponse(BaseModel):
     levels: list[AnalysisLevel]        # SAU khi hop nhat mode + goal.levels + kha dung
     notices: list[Notice] = Field(default_factory=list)
     goal_summary: str                  # cau "He thong hieu cau hoi cua ban la..."
+    chart_check: Optional[ChartVerdict] = None  # ket qua tham dinh bieu do tuy y (neu co chart_pref)

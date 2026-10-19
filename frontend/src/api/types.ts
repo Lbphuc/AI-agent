@@ -12,7 +12,64 @@ export type TimeScope =
   | "last_6_months"
   | "last_12_months"
   | "custom";
-export type ChartType = "line" | "area" | "bar" | "bar_horizontal" | "pie";
+export type ChartType =
+  | "kpi"
+  | "line"
+  | "area"
+  | "bar"
+  | "bar_horizontal"
+  | "pie"
+  | "stacked_bar"
+  | "waterfall"
+  | "scatter"
+  | "heatmap"
+  | "box"
+  | "histogram";
+
+export type DataShape =
+  | "kpi"
+  | "category_series"
+  | "waterfall"
+  | "points"
+  | "matrix"
+  | "boxes"
+  | "bins";
+
+export interface Reason {
+  code: string;
+  severity: "block" | "confirm" | "info";
+  message: string;
+  suggest: ChartType[];
+}
+
+export interface ChartVerdict {
+  status: "ok" | "confirm" | "blocked";
+  chart_type: ChartType;
+  reasons: Reason[];
+  alternatives: ChartType[];
+  requires_double_confirm?: boolean;
+  confirm_step?: number;
+}
+
+export interface ChartOption {
+  chart_type: ChartType;
+  verdict: "recommended" | "ok" | "confirm" | "blocked";
+  reasons: Reason[];
+  requires_fetch: boolean;
+}
+
+export interface ChartCatalogItem {
+  chart_type: ChartType;
+  display_name: string;
+  icon: string;
+  status: "ready" | "soon";
+  fitness: "recommended" | "ok" | "confirm" | "blocked";
+  verdict: "ok" | "confirm" | "blocked";
+  requires_double_confirm?: boolean;
+  reasons: Reason[];
+  data_shape: DataShape;
+}
+
 export type ChartHint = "area" | "pie";
 
 export type AnalysisLevel = "descriptive" | "diagnostic" | "forecast" | "prescriptive";
@@ -49,6 +106,7 @@ export interface DataProfile {
   frequency?: string | null;
   n_periods?: number | null;
   availability?: Record<string, ModeAvailability>;
+  chart_catalog?: Record<string, ChartCatalogItem[]>;
 }
 
 export interface AnalysisTask {
@@ -92,6 +150,55 @@ export type Perspective =
 
 export type ChartRole = "primary" | "supplementary";
 
+export interface WaterfallStep {
+  name?: string;
+  label?: string;
+  value?: number;
+  delta?: number;
+  subtotal?: number;
+  is_total?: boolean;
+}
+
+export interface ScatterPoint {
+  name: string;
+  x: number;
+  y: number;
+}
+
+export interface HeatmapCell {
+  x: string;
+  y: string;
+  value: number;
+  intensity: number;
+}
+
+export interface HeatmapMatrix {
+  x_labels: string[];
+  y_labels: string[];
+  cells: HeatmapCell[];
+  min: number;
+  max: number;
+}
+
+export interface BoxData {
+  name: string;
+  min: number;
+  q1: number;
+  median: number;
+  q3: number;
+  max: number;
+  mean?: number;
+  outliers?: number[];
+}
+
+export interface HistogramBin {
+  label: string;
+  bin_start: number;
+  bin_end: number;
+  count: number;
+  percent: number;
+}
+
 export interface ChartSpec {
   chart_type: ChartType;
   title: string;
@@ -109,6 +216,20 @@ export interface ChartSpec {
     upper: (number | null)[];
   } | null;
   forecast_from?: string | null;
+  data_shape?: DataShape;
+  selection?: "auto" | "user";
+  notes?: string[];
+  options?: ChartOption[];
+  kpi_value?: number | null;
+  kpi_delta?: number | null;
+  kpi_delta_pct?: number | null;
+  kpi_delta_percent?: number | null;
+  kpi_period?: string | null;
+  waterfall_steps?: WaterfallStep[] | null;
+  scatter_points?: ScatterPoint[] | null;
+  heatmap_matrix?: HeatmapMatrix | null;
+  box_data?: BoxData[] | null;
+  histogram_bins?: HistogramBin[] | null;
 }
 
 export interface InsightResult {
@@ -145,6 +266,7 @@ export interface InterpretResponse {
   levels: AnalysisLevel[];
   notices: Notice[];
   goal_summary: string;
+  chart_check?: ChartVerdict | null;
 }
 
 export interface Fact {
@@ -181,6 +303,9 @@ export interface DeepenResponse {
   recommendations: Recommendation[];
   facts: Fact[];
   warnings: string[];
+  meta?: {
+    computed_in_sec?: number;
+  } | null;
 }
 
 export interface ExportSections {
@@ -202,5 +327,5 @@ export interface ExportXlsxRequest {
 
 /** Lỗi trả về từ FastAPI (HTTPException detail) */
 export interface ApiError {
-  detail: string;
+  detail: string | { message?: string; verdict?: ChartVerdict };
 }

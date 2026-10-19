@@ -24,8 +24,45 @@ mở rộng từ ý tưởng SUMMARIZER / GOAL EXPLORER / VISGENERATOR của LID
 - [x] **Thiết kế lại giao diện & Xuất báo cáo (PDF, Excel, PNG, CSV):** App Rail điều hướng mở rộng, Query Bar thu gọn, chuẩn hóa thẻ biểu đồ ChartCard (giải quyết 100% lỗi hiển thị), Design Tokens, bộ xuất báo cáo đa định dạng kèm biểu đồ Excel gốc và in PDF vector A4.
 - [x] **Phân tích sâu 3 cấp (Chẩn đoán · Dự báo · Đề xuất):** Kiến trúc Dual-track kết hợp đường mô tả sandbox và đường phân tích sâu tất định (pure Python numpy/pandas) với `FactSheet` làm nguồn chân lý duy nhất và bộ kiểm chứng cấu trúc `verify.py` loại bỏ 100% ảo giác số liệu và citation giả.
 - [x] **Chế độ phân tích dạng Pills (ModePicker):** 5 chế độ phân tích (`Tự động`, `Tổng quan`, `Tìm nguyên nhân`, `Dự đoán tương lai`, `Gợi ý chiến lược`) với khả năng tính toán khả dụng trước khi gõ câu hỏi, suy luận ý định (O2 `levels`), và thực thi song song bất đồng bộ.
+- [x] **Chọn biểu đồ tùy ý & Trọng tài cảnh báo/xác nhận (Chart Selection & Arbitration):** Cho phép người dùng tự do chọn 12 loại biểu đồ; đánh giá mức độ tương thích qua ma trận 4 mức (★ Khuyến nghị, ○ Dùng được, ⚠ Ít phù hợp, ✕ Không áp dụng) và bộ luật dữ liệu tất định (`chart_rules.py`); tôn trọng tuyệt đối lựa chọn của người dùng (không thay thầm); menu `⋯` đổi loại biểu đồ linh hoạt cùng/khác `data_shape` (`POST /render`).
 
-### CHANGELOG — Phân tích sâu 3 cấp & Chế độ phân tích dạng Pills
+### CHANGELOG — Chọn Biểu Đồ Tùy Ý & Trọng Tài Cảnh Báo/Xác Nhận (Chart Arbitration)
+
+- **Ma trận tương thích Chiến lược × Biểu đồ (`chart_fitness.py`):**
+  - Hệ thống ma trận 4 mức được nhóm đề xuất dựa trên mục tiêu phân tích của từng cấp độ và nguyên tắc trực quan hóa dữ liệu (không gán ép quy chuẩn của Gartner):
+    - ★ **Khuyến nghị:** Biểu đồ tối ưu nhất cho mục tiêu phân tích.
+    - ○ **Dùng được:** Thể hiện được dữ liệu mà không gây hiểu lầm.
+    - ⚠ **Ít phù hợp (Hỏi xác nhận):** Vẽ được nhưng dễ gây hiểu sai hoặc lệch mục tiêu (mở `ChartConfirmDialog` giải thích lý do bằng tiếng Việt đời thường, gợi ý biểu đồ thay thế an toàn).
+    - ✕ **Không áp dụng (Chặn):** Không thể vẽ do dữ liệu hoặc bản chất cấp phân tích không cho phép (trả về HTTP 422, nút chọn bị mờ/khóa).
+
+| Biểu đồ | Tổng quan | Tìm nguyên nhân | Dự đoán | Gợi ý chiến lược | Trạng thái |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Thẻ KPI (`kpi`) | ★ | ○ | ○ | ★ (khi có mục tiêu) | Sẵn sàng (`ready`) |
+| Cột dọc (`bar`) | ★ | ○ | ○ | ✕ | Sẵn sàng (`ready`) |
+| Cột ngang (`bar_horizontal`) | ★ | ○ | ⚠ | ✕ | Sẵn sàng (`ready`) |
+| Đường xu hướng (`line`) | ★ | ○ | ★ | ✕ | Sẵn sàng (`ready`) |
+| Vùng (`area`) | ○ | ○ | ★ | ✕ | Sẵn sàng (`ready`) |
+| Tròn tỷ trọng (`pie`) | ○ | ⚠ | ✕ | ✕ | Sẵn sàng (`ready`) |
+| Cột chồng (`stacked_bar`) | ★ | ○ | ✕ | ✕ | Sẵn sàng (`ready`) |
+| Thác nước (`waterfall`) | ○ | ★ | ✕ | ✕ | Sẵn sàng (`ready`) |
+| Phân tán (`scatter`) | ⚠ | ★ | ✕ | ✕ | Sắp có (`soon`) |
+| Bản đồ nhiệt (`heatmap`) | ○ | ★ | ✕ | ✕ | Sắp có (`soon`) |
+| Hộp (`box`) | ⚠ | ★ | ✕ | ✕ | Sắp có (`soon`) |
+| Tần suất (`histogram`) | ⚠ | ★ | ✕ | ✕ | Sắp có (`soon`) |
+
+- **Bộ luật dữ liệu tất định (`chart_rules.py`):**
+  - 14 mã lý do chuẩn hóa: `NEEDS_TWO_MEASURES`, `NEEDS_TIME`, `NEEDS_GROUP`, `NEGATIVE_VALUES`, `NOT_ADDITIVE`, `INSUFFICIENT_DATA`, `NOT_APPLICABLE`, `UNSUPPORTED_YET`, `STRATEGY_UNUSUAL`, `TOO_MANY_SLICES`, `TOO_FEW_POINTS`, `TOO_MANY_CATEGORIES`, `LONG_LABELS`, `SAMPLED`.
+  - **Một nguồn luật, hai cách phản ứng:** Ở chế độ *Tự động*, hàm `auto_pick()` áp dụng các luật này để tự động chuyển đổi phương án dự phòng (fallback); ở chế độ *Chọn tay*, hàm `check_chart_choice()` dùng cùng các luật này để quyết định chặn (422) hoặc mở hộp thoại hỏi xác nhận (409).
+  - **Nguyên tắc Không thay thầm (No Silent Mutation):** Khi người dùng tự chọn biểu đồ và đã xác nhận (`selection="user"`), hệ thống bảo toàn 100% biểu đồ đó, không bao giờ tự ý đổi sang biểu đồ khác. Cảnh báo đã xác nhận được ghi chú trên thẻ và lưu vào phụ lục báo cáo.
+- **Frontend Components:**
+  - `ChartTypePicker`: Giao diện chọn biểu đồ trực quan đặt cạnh hàng pills, phân nhóm 4 mức phù hợp, hiển thị nhãn "Sắp có" cho các biểu đồ giai đoạn sau, chip reset "✕ Tự động" nhanh trong 1 chạm.
+  - `ChartConfirmDialog`: Hộp thoại chuẩn `alertdialog`, bẫy focus vào lựa chọn an toàn mặc định, cung cấp nút "Vẫn dùng" và nút "Dùng [Gợi ý]", hỗ trợ checkbox "Không nhắc lại cảnh báo kiểu này trong phiên".
+  - Hỗ trợ Recharts đa dạng: Thẻ KPI (`renderKpiCard`), Biểu đồ Thác nước (`waterfall` dạng cột chồng đáy trong suốt), Cột ngang (`layout="vertical"`), Cột chồng (`stackId`).
+  - Menu ba chấm `⋯` trên từng thẻ biểu đồ: Cho phép đổi loại biểu đồ linh hoạt (cùng `data_shape` đổi tức thì tại client; khác `data_shape` gọi `POST /render`).
+- **Chất lượng kiểm thử:**
+  - **189/189 tests backend pass 100%** (bổ sung 22 test trong `test_chart_rules.py`).
+  - **27/27 tests frontend vitest pass 100%** (bổ sung 11 test trong `chart_selection.test.ts`).
+
 
 - **Kiến trúc phân tích sâu tất định (`backend/app/modules/analytics/`):**
   - **Cấp 1: Chẩn đoán (`diagnostic.py`):**

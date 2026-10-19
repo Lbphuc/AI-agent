@@ -8,6 +8,8 @@ import {
   Pie,
   AreaChart,
   Area,
+  ScatterChart,
+  Scatter,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -283,6 +285,27 @@ function RenderStaticChart({ item }: { item: ReportChartItem }) {
           />
         ))}
       </LineChart>
+    );
+  }
+
+  if (spec.chart_type === "scatter") {
+    const scatterData = (spec.scatter_points && spec.scatter_points.length > 0)
+      ? spec.scatter_points
+      : (spec.x || []).map((name, i) => {
+          const yVal = Number(spec.series[seriesKeys[0]]?.[i] ?? 0);
+          const parsedX = parseFloat(name);
+          const xVal = !isNaN(parsedX) ? parsedX : (i + 1);
+          return { name, x: xVal, y: yVal };
+        });
+
+    return (
+      <ScatterChart width={width} height={height} margin={{ top: 10, right: 20, left: 20, bottom: 25 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" />
+        <XAxis dataKey="x" name="X" stroke="#475569" tickFormatter={(v) => formatNumber(v)} />
+        <YAxis dataKey="y" name="Y" stroke="#475569" tickFormatter={(v) => formatNumber(v)} />
+        <Legend />
+        <Scatter name={spec.display_name || "Điểm quan sát"} data={scatterData} fill={PRINT_COLORS[0]} isAnimationActive={false} />
+      </ScatterChart>
     );
   }
 

@@ -1,7 +1,14 @@
 import { useState, useCallback, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import type { FormEvent } from "react";
-import { analyzeData, profileData, interpretQuestion, deepenAnalysis } from "./api/client";
+import {
+  analyzeData,
+  profileData,
+  interpretQuestion,
+  deepenAnalysis,
+  renderChart,
+  ArbitrationError,
+} from "./api/client";
 import type {
   AnalyzeResponse,
   ExportSections,
@@ -10,6 +17,10 @@ import type {
   AnalysisLevel,
   InterpretResponse,
   DeepenResponse,
+  ChartType,
+  ChartVerdict,
+  ChartOption,
+  ChartSpec,
 } from "./api/types";
 import FileUpload from "./components/FileUpload";
 import ChartPanel from "./components/ChartPanel";
@@ -19,6 +30,12 @@ import { AppRail } from "./components/AppRail";
 import { QueryBar } from "./components/QueryBar";
 import { ResultToolbar } from "./components/ResultToolbar";
 import { ModePicker } from "./components/ModePicker";
+import { ChartTypePicker, CHART_NAMES } from "./components/ChartTypePicker";
+import {
+  ChartConfirmDialog,
+  getSessionAcks,
+  saveSessionAcks,
+} from "./components/ChartConfirmDialog";
 import { DeepenSection } from "./components/DeepenSection";
 import { ExportDialog, type ExportFormat } from "./export/ExportDialog";
 import { ReportDocument } from "./export/ReportDocument";
@@ -44,7 +61,19 @@ export default function App() {
   const [profile, setProfile] = useState<DataProfile | null>(null);
   const [question, setQuestion] = useState("");
   const [mode, setMode] = useState<AnalysisMode>("auto");
+  const [selectedCharts, setSelectedCharts] = useState<ChartType[]>([]);
+  const chartPref = selectedCharts[0] || null;
+  const setChartPref = useCallback((ct: ChartType | null) => {
+    setSelectedCharts(ct ? [ct] : []);
+  }, []);
+  const [ackCodes, setAckCodes] = useState<string[]>([]);
   const [expandViews, setExpandViews] = useState(true);
+
+  // Hộp thoại xác nhận biểu đồ (ChartConfirmDialog)
+  const [confirmVerdict, setConfirmVerdict] = useState<ChartVerdict | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [strategyToast, setStrategyToast] = useState<string | null>(null);
+  const pendingActionRef = useRef<((effectiveAcks: string[]) => void) | null>(null);
 
   // Kết quả phân tích
   const [interpretResponse, setInterpretResponse] = useState<InterpretResponse | null>(null);
@@ -124,9 +153,212 @@ export default function App() {
     }
   }, [mode, profile]);
 
+  /**
+   * Chạy các tác vụ phân tích nặng sau khi đã xác thực biểu đồ hợp lệ
+   */
+  const executeAnalysis = useCallback(
+    async (
+      interp: InterpretResponse,
+      currentAcks: string[],
+      currentRunId: number,
+      abortController: AbortController,
+      chartsToUse: ChartType[] = selectedCharts
+    ) => {
+      const { goal, levels } = interp;
+      const tasks: Promise<void>[] = [];
+      let hasSuccessfulTask = false;
+      let openedConfirm = false;
+
+      // 1. Phân tích mô tả (O1..O5)
+      if (levels.includes("descriptive")) {
+        tasks.push(
+          (async () => {
+            try {
+              const descRes = await analyzeData(
+                file!,
+                question.trim(),
+                expandViews,
+                goal,
+                chartsToUse.length > 0 ? chartsToUse : null,
+                currentAcks,
+                abortController.signal
+              );
+              if (runIdRef.current === currentRunId) {
+                setDescriptiveResult(descRes);
+                hasSuccessfulTask = true;
+              }
+            } catch (err) {
+              if (runIdRef.current === currentRunId && !abortController.signal.aborted) {
+                if (err instanceof ArbitrationError && err.verdict) {
+                  openedConfirm = true;
+                  setConfirmVerdict(err.verdict);
+                  setIsConfirmOpen(true);
+                  pendingActionRef.current = (effectiveAcks: string[]) => {
+                    setAppState("loading");
+                    handleSubmit(undefined, effectiveAcks, chartsToUse);
+                  };
+                  setAppState("idle");
+                } else {
+                  console.error("Descriptive analysis error:", err);
+                  setErrorMsg(err instanceof Error ? err.message : "Đã xảy ra lỗi phân tích.");
+                  setAppState("error");
+                }
+              }
+            }
+          })()
+        );
+      }
+
+      // 2. Phân tích đề xuất (prescriptive trả cả căn cứ)
+      if (levels.includes("prescriptive")) {
+        setDeepenLoading((prev) => ({ ...prev, prescriptive: true }));
+        tasks.push(
+          (async () => {
+            try {
+              const presRes = await deepenAnalysis(
+                file!,
+                goal,
+                "prescriptive",
+                mode === "prescriptive" && chartsToUse.length > 0 ? chartsToUse : null,
+                currentAcks,
+                abortController.signal
+              );
+              if (runIdRef.current === currentRunId) {
+                setDeepenResults((prev) => ({ ...prev, prescriptive: presRes }));
+                hasSuccessfulTask = true;
+              }
+            } catch (err) {
+              if (runIdRef.current === currentRunId && !abortController.signal.aborted) {
+                if (err instanceof ArbitrationError && err.verdict) {
+                  openedConfirm = true;
+                  setConfirmVerdict(err.verdict);
+                  setIsConfirmOpen(true);
+                  pendingActionRef.current = (effectiveAcks: string[]) => {
+                    setAppState("loading");
+                    handleSubmit(undefined, effectiveAcks, chartsToUse);
+                  };
+                  setAppState("idle");
+                } else {
+                  console.warn("Prescriptive deepen error/warning:", err);
+                }
+              }
+            } finally {
+              if (runIdRef.current === currentRunId) {
+                setDeepenLoading((prev) => ({ ...prev, prescriptive: false }));
+              }
+            }
+          })()
+        );
+      } else {
+        // Diagnostic
+        if (levels.includes("diagnostic")) {
+          setDeepenLoading((prev) => ({ ...prev, diagnostic: true }));
+          tasks.push(
+            (async () => {
+              try {
+                const diagRes = await deepenAnalysis(
+                  file!,
+                  goal,
+                  "diagnostic",
+                  mode === "diagnostic" && chartsToUse.length > 0 ? chartsToUse : null,
+                  currentAcks,
+                  abortController.signal
+                );
+                if (runIdRef.current === currentRunId) {
+                  setDeepenResults((prev) => ({ ...prev, diagnostic: diagRes }));
+                  hasSuccessfulTask = true;
+                }
+              } catch (err) {
+                if (runIdRef.current === currentRunId && !abortController.signal.aborted) {
+                  if (err instanceof ArbitrationError && err.verdict) {
+                    openedConfirm = true;
+                    setConfirmVerdict(err.verdict);
+                    setIsConfirmOpen(true);
+                    pendingActionRef.current = (effectiveAcks: string[]) => {
+                      setAppState("loading");
+                      handleSubmit(undefined, effectiveAcks, chartsToUse);
+                    };
+                    setAppState("idle");
+                  } else {
+                    console.warn("Diagnostic deepen error/warning:", err);
+                  }
+                }
+              } finally {
+                if (runIdRef.current === currentRunId) {
+                  setDeepenLoading((prev) => ({ ...prev, diagnostic: false }));
+                }
+              }
+            })()
+          );
+        }
+
+        // Forecast
+        if (levels.includes("forecast")) {
+          setDeepenLoading((prev) => ({ ...prev, forecast: true }));
+          tasks.push(
+            (async () => {
+              try {
+                const fcRes = await deepenAnalysis(
+                  file!,
+                  goal,
+                  "forecast",
+                  mode === "forecast" && chartsToUse.length > 0 ? chartsToUse : null,
+                  currentAcks,
+                  abortController.signal
+                );
+                if (runIdRef.current === currentRunId) {
+                  setDeepenResults((prev) => ({ ...prev, forecast: fcRes }));
+                  hasSuccessfulTask = true;
+                }
+              } catch (err) {
+                if (runIdRef.current === currentRunId && !abortController.signal.aborted) {
+                  if (err instanceof ArbitrationError && err.verdict) {
+                    openedConfirm = true;
+                    setConfirmVerdict(err.verdict);
+                    setIsConfirmOpen(true);
+                    pendingActionRef.current = (effectiveAcks: string[]) => {
+                      setAppState("loading");
+                      handleSubmit(undefined, effectiveAcks, chartsToUse);
+                    };
+                    setAppState("idle");
+                  } else {
+                    console.warn("Forecast deepen error/warning:", err);
+                  }
+                }
+              } finally {
+                if (runIdRef.current === currentRunId) {
+                  setDeepenLoading((prev) => ({ ...prev, forecast: false }));
+                }
+              }
+            })()
+          );
+        }
+      }
+
+      await Promise.allSettled(tasks);
+
+      if (runIdRef.current === currentRunId) {
+        if (hasSuccessfulTask) {
+          setAppState("result");
+          setTimeout(() => {
+            resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }, 80);
+        } else if (!openedConfirm) {
+          setErrorMsg((prev) => prev || "Không thể tải kết quả phân tích do lỗi máy chủ.");
+          setAppState("error");
+        }
+      }
+    },
+    [file, question, expandViews, mode, selectedCharts]
+  );
+
   // Thực hiện phân tích song song
   const handleSubmit = useCallback(
-    async (e?: FormEvent) => {
+    async (
+      e?: FormEvent,
+      overrideAcks?: string[],
+      overrideCharts?: ChartType[]
+    ) => {
       e?.preventDefault();
       if (!canSubmit || !file) return;
 
@@ -146,130 +378,112 @@ export default function App() {
       setDeepenResults({});
       setDeepenLoading({});
 
+      const activeCharts = overrideCharts ?? selectedCharts;
+      const allAcks = Array.from(
+        new Set([...(overrideAcks ?? ackCodes), ...getSessionAcks()])
+      );
+
       try {
-        // Bước 1: Gọi /interpret để hiểu câu hỏi và suy ra các level cần chạy
-        const interp = await interpretQuestion(file, question.trim(), mode, abortController.signal);
+        // Bước 1: Gọi /interpret để hiểu câu hỏi và kiểm tra tính hợp lệ của biểu đồ (chart_check)
+        const interp = await interpretQuestion(
+          file,
+          question.trim(),
+          mode,
+          activeCharts.length > 0 ? activeCharts : null,
+          allAcks,
+          abortController.signal
+        );
         if (runIdRef.current !== currentRunId) return;
 
         setInterpretResponse(interp);
-        const { goal, levels } = interp;
+
+        // Kiểm tra chart_check TRƯỚC khi chạy phân tích nặng
+        if (interp.chart_check) {
+          const verdict = interp.chart_check;
+          const isBlocked = verdict.status === "blocked" || Boolean(verdict.requires_double_confirm);
+
+          if (isBlocked) {
+            const unforced = verdict.reasons
+              .map((r) => r.code)
+              .filter((c) => !allAcks.includes(`force:${c}`) && !allAcks.includes("force:all"));
+
+            if (unforced.length > 0) {
+              setConfirmVerdict(verdict);
+              setIsConfirmOpen(true);
+              pendingActionRef.current = (effectiveAcks: string[]) => {
+                setAppState("loading");
+                executeAnalysis(interp, effectiveAcks, currentRunId, abortController, activeCharts);
+              };
+              setAppState("idle");
+              return;
+            }
+          } else if (verdict.status === "confirm") {
+            const unacked = verdict.reasons
+              .filter((r) => r.severity === "confirm")
+              .map((r) => r.code)
+              .filter((c) => !allAcks.includes(c));
+
+            if (unacked.length > 0) {
+              setConfirmVerdict(verdict);
+              setIsConfirmOpen(true);
+              pendingActionRef.current = (effectiveAcks: string[]) => {
+                setAppState("loading");
+                executeAnalysis(interp, effectiveAcks, currentRunId, abortController, activeCharts);
+              };
+              setAppState("idle");
+              return;
+            }
+          }
+        }
 
         // Bước 2: Chạy song song các nhánh phân tích
-        const tasks: Promise<void>[] = [];
-
-        // 1. Phân tích mô tả (O1..O5)
-        if (levels.includes("descriptive")) {
-          tasks.push(
-            (async () => {
-              try {
-                const descRes = await analyzeData(file, question.trim(), expandViews, goal, abortController.signal);
-                if (runIdRef.current === currentRunId) {
-                  setDescriptiveResult(descRes);
-                }
-              } catch (err) {
-                if (runIdRef.current === currentRunId && !abortController.signal.aborted) {
-                  console.error("Descriptive analysis error:", err);
-                }
-              }
-            })()
-          );
-        }
-
-        // 2. Phân tích đề xuất (prescriptive trả cả căn cứ)
-        if (levels.includes("prescriptive")) {
-          setDeepenLoading((prev) => ({ ...prev, prescriptive: true }));
-          tasks.push(
-            (async () => {
-              try {
-                const presRes = await deepenAnalysis(file, goal, "prescriptive", abortController.signal);
-                if (runIdRef.current === currentRunId) {
-                  setDeepenResults((prev) => ({ ...prev, prescriptive: presRes }));
-                }
-              } catch (err) {
-                if (runIdRef.current === currentRunId && !abortController.signal.aborted) {
-                  console.error("Prescriptive error:", err);
-                }
-              } finally {
-                if (runIdRef.current === currentRunId) {
-                  setDeepenLoading((prev) => ({ ...prev, prescriptive: false }));
-                }
-              }
-            })()
-          );
-        } else {
-          // Diagnostic
-          if (levels.includes("diagnostic")) {
-            setDeepenLoading((prev) => ({ ...prev, diagnostic: true }));
-            tasks.push(
-              (async () => {
-                try {
-                  const diagRes = await deepenAnalysis(file, goal, "diagnostic", abortController.signal);
-                  if (runIdRef.current === currentRunId) {
-                    setDeepenResults((prev) => ({ ...prev, diagnostic: diagRes }));
-                  }
-                } catch (err) {
-                  if (runIdRef.current === currentRunId && !abortController.signal.aborted) {
-                    console.error("Diagnostic error:", err);
-                  }
-                } finally {
-                  if (runIdRef.current === currentRunId) {
-                    setDeepenLoading((prev) => ({ ...prev, diagnostic: false }));
-                  }
-                }
-              })()
-            );
-          }
-
-          // Forecast
-          if (levels.includes("forecast")) {
-            setDeepenLoading((prev) => ({ ...prev, forecast: true }));
-            tasks.push(
-              (async () => {
-                try {
-                  const fcRes = await deepenAnalysis(file, goal, "forecast", abortController.signal);
-                  if (runIdRef.current === currentRunId) {
-                    setDeepenResults((prev) => ({ ...prev, forecast: fcRes }));
-                  }
-                } catch (err) {
-                  if (runIdRef.current === currentRunId && !abortController.signal.aborted) {
-                    console.error("Forecast error:", err);
-                  }
-                } finally {
-                  if (runIdRef.current === currentRunId) {
-                    setDeepenLoading((prev) => ({ ...prev, forecast: false }));
-                  }
-                }
-              })()
-            );
-          }
-        }
-
-        await Promise.allSettled(tasks);
-
-        if (runIdRef.current === currentRunId) {
-          setAppState("result");
-          setTimeout(() => {
-            resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-          }, 80);
-        }
+        await executeAnalysis(interp, allAcks, currentRunId, abortController, activeCharts);
       } catch (err) {
         if (runIdRef.current === currentRunId && !abortController.signal.aborted) {
-          setErrorMsg(err instanceof Error ? err.message : "Đã xảy ra lỗi không xác định.");
-          setAppState("error");
+          if (err instanceof ArbitrationError && err.verdict) {
+            setConfirmVerdict(err.verdict);
+            setIsConfirmOpen(true);
+            pendingActionRef.current = (effectiveAcks: string[]) => {
+              setAppState("loading");
+              handleSubmit(undefined, effectiveAcks, activeCharts);
+            };
+            setAppState("idle");
+          } else {
+            setErrorMsg(err instanceof Error ? err.message : "Đã xảy ra lỗi không xác định.");
+            setAppState("error");
+          }
         }
       }
     },
-    [canSubmit, file, question, mode, expandViews]
+    [canSubmit, file, question, mode, selectedCharts, ackCodes, executeAnalysis]
   );
 
   // Đổi pill sau khi đã có kết quả -> chạy bù cấp còn thiếu
+  // Nếu biểu đồ đã chọn bị chặn ở chiến lược mới -> tự động chuyển về Tự động
   const handleModeChange = useCallback(
     async (newMode: AnalysisMode) => {
       setMode(newMode);
+
+      // Kiểm tra ma trận: nếu chartPref rơi vào ô ✕ của newMode -> tự động về null
+      if (chartPref && profile?.chart_catalog) {
+        const levelKey = newMode === "auto" ? "descriptive" : newMode;
+        const catalogItems = profile.chart_catalog[levelKey] || [];
+        const prefItem = catalogItems.find((i) => i.chart_type === chartPref);
+        if (prefItem?.fitness === "blocked" || prefItem?.verdict === "blocked") {
+          const oldName = CHART_NAMES[chartPref] || chartPref;
+          setChartPref(null);
+          setStrategyToast(
+            `Biểu đồ ${oldName} không áp dụng cho chế độ mới — đã chuyển về Tự động.`
+          );
+          setTimeout(() => setStrategyToast(null), 5000);
+        }
+      }
+
       if (appState !== "result" || !file || !interpretResponse?.goal) return;
 
       const goal = interpretResponse.goal;
       const targetLevels = MODE_TO_LEVELS[newMode] || [];
+      const allAcks = Array.from(new Set([...ackCodes, ...getSessionAcks()]));
 
       for (const lvl of targetLevels) {
         if (lvl === "descriptive") continue;
@@ -277,16 +491,21 @@ export default function App() {
 
         setDeepenLoading((prev) => ({ ...prev, [lvl]: true }));
         try {
-          const res = await deepenAnalysis(file, goal, lvl);
+          const res = await deepenAnalysis(file, goal, lvl, chartPref, allAcks);
           setDeepenResults((prev) => ({ ...prev, [lvl]: res }));
         } catch (err) {
-          console.error(`Lỗi khi tải cấp ${lvl}:`, err);
+          if (err instanceof ArbitrationError) {
+            setConfirmVerdict(err.verdict || null);
+            setIsConfirmOpen(true);
+          } else {
+            console.error(`Lỗi khi tải cấp ${lvl}:`, err);
+          }
         } finally {
           setDeepenLoading((prev) => ({ ...prev, [lvl]: false }));
         }
       }
     },
-    [appState, file, interpretResponse, deepenResults]
+    [appState, file, interpretResponse, deepenResults, chartPref, profile, ackCodes]
   );
 
   const handleReset = useCallback(() => {
@@ -297,6 +516,9 @@ export default function App() {
     setInterpretResponse(null);
     setErrorMsg(null);
     setIsFormExpanded(false);
+    setChartPref(null);
+    setAckCodes([]);
+    setStrategyToast(null);
   }, []);
 
   const handleEditQuery = useCallback(() => {
@@ -311,6 +533,146 @@ export default function App() {
     setIsFormExpanded(true);
     questionRef.current?.focus();
   }, []);
+
+  // Xử lý khi người dùng chọn "Vẫn dùng" trong hộp thoại xác nhận
+  const handleConfirmOverride = useCallback((newCodes: string[]) => {
+    const updated = Array.from(new Set([...ackCodes, ...getSessionAcks(), ...newCodes]));
+    setAckCodes(updated);
+    saveSessionAcks(newCodes);
+    setIsConfirmOpen(false);
+    setConfirmVerdict(null);
+    setAppState("loading");
+
+    if (pendingActionRef.current) {
+      const act = pendingActionRef.current;
+      pendingActionRef.current = null;
+      act(updated);
+    } else {
+      setTimeout(() => handleSubmit(undefined, updated), 50);
+    }
+  }, [ackCodes, handleSubmit]);
+
+  // Xử lý khi người dùng chấp nhận gợi ý biểu đồ an toàn
+  const handleAcceptSuggestion = useCallback((altChart: ChartType) => {
+    setSelectedCharts([altChart]);
+    setIsConfirmOpen(false);
+    setConfirmVerdict(null);
+    pendingActionRef.current = null;
+    setAppState("loading");
+    setTimeout(() => handleSubmit(undefined, undefined, [altChart]), 50);
+  }, [handleSubmit]);
+
+  // Hủy hộp thoại xác nhận
+  const handleConfirmCancel = useCallback(() => {
+    setIsConfirmOpen(false);
+    setConfirmVerdict(null);
+    pendingActionRef.current = null;
+  }, []);
+
+  // Đổi loại biểu đồ trên từng thẻ (menu ⋯)
+  const handleSwitchChart = useCallback(
+    async (targetChart: ChartSpec, option: ChartOption) => {
+      const allAcks = Array.from(new Set([...ackCodes, ...getSessionAcks()]));
+
+      if (option.verdict === "blocked") {
+        const unforced = option.reasons
+          .map((r) => r.code)
+          .filter((c) => !allAcks.includes(`force:${c}`));
+
+        if (unforced.length > 0) {
+          setConfirmVerdict({
+            status: "blocked",
+            chart_type: option.chart_type,
+            reasons: option.reasons,
+            alternatives: [],
+            requires_double_confirm: true,
+            confirm_step: 1,
+          });
+          setIsConfirmOpen(true);
+          pendingActionRef.current = (effectiveAcks: string[]) => {
+            applyChartSwitch(targetChart, option, effectiveAcks);
+          };
+          return;
+        }
+      } else if (option.verdict === "confirm") {
+        const unacked = option.reasons
+          .filter((r) => r.severity === "confirm")
+          .map((r) => r.code)
+          .filter((c) => !allAcks.includes(c));
+
+        if (unacked.length > 0) {
+          setConfirmVerdict({
+            status: "confirm",
+            chart_type: option.chart_type,
+            reasons: option.reasons,
+            alternatives: [],
+            requires_double_confirm: false,
+            confirm_step: 1,
+          });
+          setIsConfirmOpen(true);
+          pendingActionRef.current = (effectiveAcks: string[]) => {
+            applyChartSwitch(targetChart, option, effectiveAcks);
+          };
+          return;
+        }
+      }
+
+      await applyChartSwitch(targetChart, option, allAcks);
+    },
+    [ackCodes, file, interpretResponse, mode]
+  );
+
+  const applyChartSwitch = async (
+    targetChart: ChartSpec,
+    option: ChartOption,
+    currentAcks: string[]
+  ) => {
+    if (!file || !interpretResponse?.goal) return;
+
+    if (option.requires_fetch) {
+      try {
+        const newSpec = await renderChart(
+          file,
+          interpretResponse.goal,
+          (mode === "auto" ? "descriptive" : mode) as AnalysisLevel,
+          option.chart_type,
+          currentAcks
+        );
+
+        setDescriptiveResult((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            charts: prev.charts.map((c) => (c.title === targetChart.title ? newSpec : c)),
+          };
+        });
+      } catch (err) {
+        if (err instanceof ArbitrationError) {
+          setConfirmVerdict(err.verdict || null);
+          setIsConfirmOpen(true);
+        } else {
+          alert(err instanceof Error ? err.message : "Không thể chuyển đổi biểu đồ.");
+        }
+      }
+    } else {
+      // Cùng data_shape: Đổi tức thì ở client
+      setDescriptiveResult((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          charts: prev.charts.map((c) =>
+            c.title === targetChart.title ? { ...c, chart_type: option.chart_type } : c
+          ),
+        };
+      });
+    }
+  };
+
+  // Đổi về Tự động từ nút trên thẻ
+  const handleResetCardToAuto = useCallback(() => {
+    setChartPref(null);
+    handleSubmit();
+  }, [handleSubmit]);
 
   // Đếm số góc nhìn bổ sung
   const supplementaryCount = useMemo(() => {
@@ -426,7 +788,7 @@ export default function App() {
                     Chế độ phân tích & Câu hỏi
                   </label>
 
-                  {/* ModePicker (5 Pills) */}
+                  {/* 1. Hàng chọn Pills Chiến lược */}
                   <ModePicker
                     currentMode={mode}
                     onModeChange={handleModeChange}
@@ -434,12 +796,39 @@ export default function App() {
                     disabled={isLoading}
                   />
 
+                  {/* 2. Hàng chọn Biểu đồ tùy ý theo chiến lược */}
+                  <div className="chart-picker-row">
+                    <div className="chart-picker-label-group">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="20" x2="18" y2="10" />
+                        <line x1="12" y1="20" x2="12" y2="4" />
+                        <line x1="6" y1="20" x2="6" y2="14" />
+                      </svg>
+                      <span>Chọn biểu đồ trực quan hóa:</span>
+                    </div>
+                    <ChartTypePicker
+                      values={selectedCharts}
+                      onChangeMulti={setSelectedCharts}
+                      catalog={profile?.chart_catalog}
+                      strategy={mode}
+                      disabled={isLoading}
+                    />
+                  </div>
+
+                  {/* Thông báo nếu biểu đồ tự động reset do chế độ mới không hỗ trợ */}
+                  {strategyToast && (
+                    <div className="strategy-toast" role="status">
+                      <span>ℹ</span>
+                      <span>{strategyToast}</span>
+                    </div>
+                  )}
+
                   <textarea
                     id="question-input"
                     ref={questionRef}
                     className="question-textarea"
                     rows={3}
-                    placeholder="Ví dụ: Vì sao doanh thu Đà Nẵng sụt giảm và dự báo xu hướng quý tới?"
+                    placeholder="Ví dụ: Vì sao doanh thu sụt giảm và dự báo xu hướng các quý tới?"
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
                     disabled={isLoading}
@@ -514,8 +903,8 @@ export default function App() {
                 <div className="loading-card">
                   <div className="loading-steps">
                     {[
-                      "Thẩm định cấu trúc và kiểm tra tính khả dụng của dữ liệu",
-                      "Hiểu ý định người dùng & xác định cấp độ phân tích (O2)",
+                      "Thẩm định cấu trúc và ma trận biểu đồ của dữ liệu",
+                      "Hiểu ý định & xác thực tính tương thích của biểu đồ lựa chọn",
                       "Tính toán các số liệu thống kê tất định (Chẩn đoán / Dự báo / FactSheet)",
                       "Tạo các biểu đồ trực quan hóa chuyên sâu",
                       "Kiểm chứng dẫn chứng và tổng hợp nhận xét bằng AI",
@@ -603,6 +992,8 @@ export default function App() {
                   level="diagnostic"
                   data={deepenResults.diagnostic}
                   loading={deepenLoading.diagnostic}
+                  onSwitchChart={handleSwitchChart}
+                  onResetToAuto={handleResetCardToAuto}
                 />
               )}
 
@@ -611,6 +1002,8 @@ export default function App() {
                   level="forecast"
                   data={deepenResults.forecast}
                   loading={deepenLoading.forecast}
+                  onSwitchChart={handleSwitchChart}
+                  onResetToAuto={handleResetCardToAuto}
                 />
               )}
 
@@ -619,12 +1012,18 @@ export default function App() {
                   level="prescriptive"
                   data={deepenResults.prescriptive}
                   loading={deepenLoading.prescriptive}
+                  onSwitchChart={handleSwitchChart}
+                  onResetToAuto={handleResetCardToAuto}
                 />
               )}
 
               {/* Lưới biểu đồ chính và góc nhìn bổ sung (Mô tả) */}
               {descriptiveResult?.charts && descriptiveResult.charts.length > 0 && (
-                <ChartPanel charts={descriptiveResult.charts} />
+                <ChartPanel
+                  charts={descriptiveResult.charts}
+                  onSwitchChart={handleSwitchChart}
+                  onResetToAuto={handleResetCardToAuto}
+                />
               )}
 
               {/* Các cấp phân tích phụ khác nếu được bật hoặc tự động suy ra */}
@@ -633,6 +1032,8 @@ export default function App() {
                   level="diagnostic"
                   data={deepenResults.diagnostic}
                   loading={deepenLoading.diagnostic}
+                  onSwitchChart={handleSwitchChart}
+                  onResetToAuto={handleResetCardToAuto}
                 />
               )}
 
@@ -641,6 +1042,8 @@ export default function App() {
                   level="forecast"
                   data={deepenResults.forecast}
                   loading={deepenLoading.forecast}
+                  onSwitchChart={handleSwitchChart}
+                  onResetToAuto={handleResetCardToAuto}
                 />
               )}
 
@@ -649,6 +1052,8 @@ export default function App() {
                   level="prescriptive"
                   data={deepenResults.prescriptive}
                   loading={deepenLoading.prescriptive}
+                  onSwitchChart={handleSwitchChart}
+                  onResetToAuto={handleResetCardToAuto}
                 />
               )}
 
@@ -683,7 +1088,27 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── 4. MODAL XUẤT BÁO CÁO ── */}
+      {/* ── 4. HỘP THOẠI XÁC NHẬN / CẢNH BÁO BIỂU ĐỒ (ChartConfirmDialog) ── */}
+      <ChartConfirmDialog
+        isOpen={isConfirmOpen}
+        verdict={confirmVerdict}
+        strategyName={
+          mode === "auto"
+            ? "Tự động"
+            : mode === "descriptive"
+            ? "Tổng quan (Mô tả)"
+            : mode === "diagnostic"
+            ? "Tìm nguyên nhân (Chẩn đoán)"
+            : mode === "forecast"
+            ? "Dự đoán tương lai"
+            : "Gợi ý chiến lược"
+        }
+        onConfirmOverride={handleConfirmOverride}
+        onAcceptSuggestion={handleAcceptSuggestion}
+        onCancel={handleConfirmCancel}
+      />
+
+      {/* ── 5. MODAL XUẤT BÁO CÁO ── */}
       <ExportDialog
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
@@ -691,7 +1116,7 @@ export default function App() {
         onExport={handleExport}
       />
 
-      {/* ── 5. KHỐI IN VECTOR ẨN (#print-root) CHO BÁO CÁO A4 ── */}
+      {/* ── 6. KHỐI IN VECTOR ẨN (#print-root) CHO BÁO CÁO A4 ── */}
       {reportModel && (() => {
         const printContainer = document.getElementById("print-root");
         if (printContainer) {

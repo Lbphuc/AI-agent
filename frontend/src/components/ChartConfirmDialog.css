@@ -1,0 +1,204 @@
+.chart-confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+}
+
+.chart-confirm-modal {
+  background: var(--surface, #1e222b);
+  border: 1px solid var(--border, #333d4e);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-confirm-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border, #2d3748);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chart-confirm-header.blocked {
+  background: rgba(239, 68, 68, 0.1);
+  border-bottom-color: rgba(239, 68, 68, 0.2);
+}
+
+.chart-confirm-header.confirm {
+  background: rgba(234, 179, 8, 0.1);
+  border-bottom-color: rgba(234, 179, 8, 0.2);
+}
+
+.chart-confirm-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.chart-confirm-body {
+  padding: 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #cbd5e1;
+}
+
+.chart-confirm-subtitle {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-bottom: 14px;
+}
+
+.chart-confirm-reasons {
+  list-style-type: none;
+  padding: 0;
+  margin: 0 0 16px 0;
+}
+
+.chart-confirm-reasons li {
+  position: relative;
+  padding-left: 20px;
+  margin-bottom: 8px;
+  color: #e2e8f0;
+}
+
+.chart-confirm-reasons li::before {
+  content: "•";
+  position: absolute;
+  left: 6px;
+  color: #facc15;
+  font-weight: bold;
+}
+
+.chart-confirm-reasons.blocked li::before {
+  color: #f87171;
+}
+
+.chart-confirm-suggestion {
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #93c5fd;
+}
+
+.chart-confirm-suppress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+  cursor: pointer;
+  user-select: none;
+  margin-top: 8px;
+}
+
+.chart-confirm-suppress input {
+  cursor: pointer;
+}
+
+.chart-confirm-footer {
+  padding: 14px 20px;
+  background: rgba(0, 0, 0, 0.15);
+  border-top: 1px solid var(--border, #2d3748);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn-modal {
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-modal-safe {
+  background: #2563eb;
+  border: 1px solid #3b82f6;
+  color: #fff;
+}
+
+.btn-modal-safe:hover {
+  background: #1d4ed8;
+}
+
+.btn-modal-safe:focus {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.btn-modal-override {
+  background: transparent;
+  border: 1px solid var(--border, #475569);
+  color: #cbd5e1;
+}
+
+.btn-modal-override:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.btn-modal-cancel {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+}
+
+.btn-modal-cancel:hover {
+  color: #e2e8f0;
+}
+
+.chart-step-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.warning-box-step2 {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  color: #fecaca;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.btn-modal-warning {
+  background: #dc2626;
+  border: 1px solid #ef4444;
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn-modal-warning:hover {
+  background: #b91c1c;
+}
+

@@ -571,3 +571,41 @@
     padding: 24px 12px 60px;
   }
 }
+
+/* ── Strategy reset toast ── */
+.strategy-toast {
+  padding: 8px 14px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: var(--radius-sm, 6px);
+  color: #93c5fd;
+  font-size: var(--font-size-xs, 12px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+/* ── Dedicated Chart Picker Row ── */
+.chart-picker-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 8px 14px;
+  background: var(--bg-surface, #1e293b);
+  border: 1px solid var(--border, #334155);
+  border-radius: var(--radius-sm, 8px);
+}
+
+.chart-picker-label-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary, #94a3b8);
+  font-weight: 500;
+}
+
