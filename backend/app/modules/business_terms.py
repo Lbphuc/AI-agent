@@ -13,9 +13,15 @@ _TERM_DICTIONARY: dict[str, tuple[str, str | None]] = {
     "doanh_so": ("Doanh số", "triệu VNĐ"),
     "chi_phi": ("Chi phí", "triệu VNĐ"),
     "chi_phi_trieu_vnd": ("Chi phí", "triệu VNĐ"),
+    "chi_phi_marketing": ("Chi phí marketing", "triệu VNĐ"),
+    "chi_phi_marketing_trieu_vnd": ("Chi phí marketing", "triệu VNĐ"),
     "loai_chi_phi": ("Loại chi phí", None),
     "loi_nhuan": ("Lợi nhuận", "triệu VNĐ"),
     "chi_nhanh": ("Chi nhánh", None),
+    "danh_muc": ("Danh mục", None),
+    "nganh_hang": ("Ngành hàng", None),
+    "khu_vuc": ("Khu vực", None),
+    "phan_khuc": ("Phân khúc", None),
     "san_pham": ("Sản phẩm", None),
     "thang": ("Tháng", None),
     "ngay": ("Ngày", None),
@@ -48,13 +54,7 @@ _UNIT_SUFFIXES: list[tuple[str, str]] = [
 
 
 def resolve_column_display(name: str) -> tuple[str, str | None]:
-    """Phân giải tên cột thành (display_name, unit).
-
-    Thứ tự ưu tiên:
-    1. Trùng khớp chính xác trong từ điển nội bộ.
-    2. Nhận diện hậu tố đơn vị (_trieu_vnd, _vnd, _pct...).
-    3. Chuẩn hóa: thay dấu gạch dưới '_' bằng khoảng trắng, viết hoa chữ cái đầu.
-    """
+    """Phân giải tên cột thành (display_name, unit)."""
     key = name.lower().strip()
     if key in _TERM_DICTIONARY:
         return _TERM_DICTIONARY[key]

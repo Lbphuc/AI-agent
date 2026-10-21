@@ -1,17 +1,7 @@
 """Module O4 — Chart Generator.
 
 Chuyen ket qua tinh toan (ExecutionResult, tu O3b) thanh ChartSpec de
-frontend render bang Plotly/Recharts/Chart.js.
-
-KHONG goi LLM — tai buoc nay, loai phan tich (trend/comparison/...) da
-duoc O2 xac dinh ro va so lieu da duoc O3 tinh san, nen chi can mot anh
-xa tat dinh (deterministic mapping).
-
-Tuan 5: thay stub bang cai dat that (2 loai bieu do: line, bar).
-Tuan 8 (Tier 1): Mo rong len 5 loai bieu do + co che chart_hint.
-  - chart_hint tu O2 la goi y NGU NGHIA (LLM biet truoc khi co du lieu that).
-  - Cac luat tat dinh trong _pick_chart_type la quyet dinh DUA TREN DU LIEU THAT
-    (chi biet sau khi O3 chay xong) — triet ly nhat quan voi time_scope o O2.
+frontend render bang Recharts.
 """
 from __future__ import annotations
 
@@ -39,23 +29,15 @@ from .chart_rules import (
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Bang mac dinh va nguong an toan
-# ---------------------------------------------------------------------------
 _DEFAULT_CHART: dict[str, ChartType] = {
     "trend": "line",
     "comparison": "bar",
     "growth_rate": "bar",
 }
 
-_MAX_PIE_SLICES = 6       # vuot nguong nay, pie kho doc -> fallback bar
-_MIN_POINTS_FOR_LINE = 5  # duoi nguong nay, line/area trong yeu -> doi sang bar
-_LONG_LABEL_THRESHOLD = 12  # ky tu -> vuot nguong, bar doc thay bar dung
-
-
-# ---------------------------------------------------------------------------
-# Tieu de bieu do — template tat dinh, KHONG can LLM
-# ---------------------------------------------------------------------------
+_MAX_PIE_SLICES = 6
+_MIN_POINTS_FOR_LINE = 5
+_LONG_LABEL_THRESHOLD = 12
 
 
 def _pick_chart_type(
@@ -63,10 +45,7 @@ def _pick_chart_type(
     x: list[str],
     level: AnalysisLevel = "descriptive",
 ) -> ChartType:
-    """Ket hop goi y ngu nghia tu LLM (chart_hint) voi cac luat tat dinh thong qua auto_pick.
-
-    Dung chung 100% logic voi check_chart_choice (hop nhat mot nguon luat).
-    """
+    """Ket hop goi y ngu nghia tu LLM (chart_hint) voi cac luat tat dinh thong qua auto_pick."""
     ctx = ChartContext(
         n_categories=len(x),
         n_points=len(x),
@@ -84,20 +63,24 @@ def _build_title(task: AnalysisTask, series_vals: list[float] | None = None) -> 
     """Sinh tiêu đề biểu đồ từ task.type, tên cột đã Việt hóa và dữ liệu thực tế."""
     metric_disp, _ = resolve_column_display(task.metric)
     group_disp, _ = resolve_column_display(task.group_by) if task.group_by else ("", None)
+    agg = getattr(task, "agg", None)
+    agg_prefix = "Trung bình " if agg == "mean" else ""
 
     if task.type == "trend":
-        return f"Xu hướng {metric_disp} theo thời gian"
+        return f"Xu hướng {agg_prefix.lower()}{metric_disp} theo thời gian"
     if task.type == "comparison":
-        return f"So sánh {metric_disp} theo {group_disp}"
+        if task.chart_hint == "pie":
+            return f"Tỷ trọng {metric_disp} theo {group_disp}"
+        return f"So sánh {agg_prefix.lower()}{metric_disp} theo {group_disp}"
     if task.type == "growth_rate":
         prefix = f"{group_disp} " if group_disp else ""
         if series_vals and len(series_vals) > 0:
             all_neg = max(series_vals) < 0
             all_pos = min(series_vals) > 0
             if all_neg:
-                verb = "suy giảm mạnh nhất" if task.find == "min" else "suy giảm ít nhất"
+                verb = "giảm mạnh nhất" if task.find == "min" else "suy giảm ít nhất"
             elif all_pos:
-                verb = "tăng trưởng chậm nhất" if task.find == "min" else "tăng trưởng mạnh nhất"
+                verb = "tăng trưởng chậm nhất (giảm/ít tăng nhất)" if task.find == "min" else "tăng trưởng mạnh nhất"
             else:
                 verb = "giảm mạnh nhất" if task.find == "min" else "tăng mạnh nhất"
         else:
@@ -106,9 +89,6 @@ def _build_title(task: AnalysisTask, series_vals: list[float] | None = None) -> 
     return metric_disp
 
 
-# ---------------------------------------------------------------------------
-# Cac ham xay dung cau truc du lieu bieu do chuyen sau (O4)
-# ---------------------------------------------------------------------------
 def build_scatter_points(x: list[str], series_vals: list[float]) -> list[dict]:
     pts = []
     for i, (cat, val) in enumerate(zip(x, series_vals)):
@@ -169,8 +149,6 @@ def build_box_data(x: list[str], series_vals: list[float], metric_disp: str = "P
     upper_fence = min(max_v, q3 + 1.5 * iqr)
     outliers = [v for v in s_sorted if v < lower_fence or v > upper_fence]
 
-    # Nếu có nhiều danh mục (từ 2 đến 12), tạo từng hộp cho từng danh mục
-    # Tránh chèn thêm hộp tên chỉ số làm lẫn lộn danh mục
     if 1 < len(x) <= 12:
         boxes = []
         for cat, val in zip(x, series_vals):
@@ -237,8 +215,7 @@ def build_histogram_bins(series_vals: list[float]) -> list[dict]:
 
 def enrich_chart_spec(chart: ChartSpec) -> ChartSpec:
     """Bổ sung cấu trúc dữ liệu đặc thù (heatmap_matrix, box_data, scatter_points, histogram_bins)
-    dựa vào x và series nếu chart chưa có các trường này.
-    Đồng thời chuẩn hóa dữ liệu Pie chart khi có số âm.
+    dựa vào x và series nếu chart chưa có các trường này, và gắn danh sách options.
     """
     if not chart.series:
         return chart
@@ -269,11 +246,11 @@ def enrich_chart_spec(chart: ChartSpec) -> ChartSpec:
             if not any("tuyệt đối" in n for n in chart.notes):
                 chart.notes.append(note_text)
 
-    # Đảm bảo mọi ChartSpec đều có options lựa chọn chuyển đổi loại biểu đồ
     if not chart.options:
         is_forecast = bool(chart.forecast_from or chart.band)
         lvl: AnalysisLevel = "forecast" if is_forecast else "descriptive"
         ctx = ChartContext(
+            n_categories=len(x_labels),
             n_points=len(x_labels),
             has_negative=any(v < 0 for v in series_vals),
             n_group_cols=1,
@@ -288,9 +265,6 @@ def enrich_chart_spec(chart: ChartSpec) -> ChartSpec:
     return chart
 
 
-# ---------------------------------------------------------------------------
-# Ham xay ChartSpec tu 1 TaskResult
-# ---------------------------------------------------------------------------
 def _build_chart(
     task: AnalysisTask,
     execution: ExecutionResult,
@@ -299,11 +273,7 @@ def _build_chart(
     profile: DataProfile | None = None,
     notes: list[str] | None = None,
 ) -> ChartSpec | None:
-    """Xay ChartSpec tu 1 (task, execution) da thanh cong.
-
-    Tra None thay vi raise neu thieu du lieu — voi AnalysisGoal nhieu
-    task, 1 task loi khong nen lam hong bieu do cua cac task khac.
-    """
+    """Xay ChartSpec tu 1 (task, execution) da thanh cong."""
     data_key = task.type
     data = execution.results.get(data_key)
 
@@ -324,14 +294,12 @@ def _build_chart(
         except (ValueError, TypeError):
             series_vals.append(0.0)
 
-    # Nếu là task trend: Chuẩn hóa theo trình tự thời gian và resampling nếu dữ liệu quá dày
     if task.type == "trend" and len(data) >= 2:
         try:
             parsed_dates = pd.to_datetime(list(data.keys()), errors="coerce")
             if not parsed_dates.isna().any():
                 s = pd.Series(series_vals, index=parsed_dates).sort_index()
                 time_span_days = (s.index.max() - s.index.min()).days
-                # Nếu chuỗi trải dài > 60 ngày và có nhiều hơn 35 mốc đơn lẻ, gom nhóm theo Tháng
                 if time_span_days > 60 and len(s) > 35:
                     agg_fn = "mean" if ("tỷ lệ" in str(task.metric).lower() or "rate" in str(task.metric).lower()) else "sum"
                     s_monthly = s.resample("MS").agg(agg_fn)
@@ -343,7 +311,6 @@ def _build_chart(
         except Exception as exc:
             logger.warning("Không thể chuẩn hóa chuỗi thời gian cho task trend: %s", exc)
 
-    # Xac dinh loai bieu do va che do chon (auto vs user)
     selection: Literal["auto", "user"] = "auto"
     if chart_pref:
         chart_type = chart_pref
@@ -360,7 +327,6 @@ def _build_chart(
     metric_disp, unit = resolve_column_display(task.metric)
     data_shape = CHART_DATA_SHAPE.get(chart_type, "category_series")
 
-    # Tinh toan thong tin dac thu theo data_shape
     kpi_value = None
     kpi_delta = None
     kpi_delta_pct = None
@@ -381,7 +347,6 @@ def _build_chart(
                 kpi_period = "Tổng cộng"
 
     elif data_shape == "waterfall" or chart_type == "waterfall":
-        # Tao cac buoc waterfall: base -> deltas -> subtotal
         steps = []
         running = 0.0
         for cat, val in zip(x, series_vals):
@@ -401,7 +366,6 @@ def _build_chart(
             })
         waterfall_steps = steps
 
-
     scatter_points = None
     heatmap_matrix = None
     box_data = None
@@ -416,7 +380,6 @@ def _build_chart(
     elif data_shape == "bins" or chart_type == "histogram":
         histogram_bins = build_histogram_bins(series_vals)
 
-    # Xay ChartContext de tao danh sach options cho the bieu do
     ctx = ChartContext(
         n_categories=len(x),
         n_points=len(x),
@@ -448,11 +411,12 @@ def _build_chart(
             chart_notes.insert(0, f"Biểu đồ do bạn chọn: {disp}")
 
     chart_unit = "%" if task.type == "growth_rate" else unit
+    # Giữ khóa series là task.metric để tương thích ngược với các bài kiểm thử,
+    # đồng thời đặt display_name rõ ràng để giao diện hiển thị "% Thay đổi <Metric>"
+    series_key = task.metric
     if task.type == "growth_rate":
-        series_key = "% Thay đổi"
         disp_name = f"% Thay đổi {metric_disp}"
     else:
-        series_key = task.metric
         disp_name = metric_disp
 
     return ChartSpec(
@@ -479,9 +443,6 @@ def _build_chart(
     )
 
 
-# ---------------------------------------------------------------------------
-# Ham chinh — API cong khai cua module O4
-# ---------------------------------------------------------------------------
 def generate_charts(
     task_results: list[TaskResult],
     chart_pref: Optional[ChartType] = None,
@@ -491,14 +452,9 @@ def generate_charts(
     confirmed_notes: Optional[list[str]] = None,
     confirmed_notes_by_pref: Optional[dict[str, list[str]]] = None,
 ) -> list[ChartSpec]:
-    """Sinh danh sach ChartSpec tu tat ca TaskResult thanh cong.
-
-    Ho tro nguoi dung chon nhieu loai bieu do cung luc (chart_prefs: list[ChartType]).
-    Voi moi loai bieu do duoc chon cho tac vu chinh, mot the ChartSpec tuong ung se duoc sinh ra.
-    """
+    """Sinh danh sach ChartSpec tu tat ca TaskResult thanh cong."""
     charts: list[ChartSpec] = []
 
-    # Hop nhat chart_pref don le va chart_prefs danh sach
     prefs: list[ChartType] = []
     if chart_prefs:
         for p in chart_prefs:
@@ -516,7 +472,6 @@ def generate_charts(
             continue
 
         if idx == 0 and prefs:
-            # Nguoi dung chon 1 hoac nhieu bieu do cho task chinh
             for p in prefs:
                 p_notes = None
                 if confirmed_notes_by_pref and p in confirmed_notes_by_pref:
@@ -537,10 +492,7 @@ def generate_charts(
                         chart_name = CHART_DISPLAY_NAMES.get(p, p)
                         chart.title = f"{chart.title} ({chart_name})"
                     charts.append(chart)
-                else:
-                    logger.warning("_build_chart tra None cho task: type=%r, pref=%r", tr.task.type, p)
         else:
-            # Cac task con lai hoac che do Tu dong
             p_notes = confirmed_notes if (idx == 0 and len(prefs) <= 1) else None
             chart = _build_chart(
                 tr.task,
@@ -552,7 +504,5 @@ def generate_charts(
             )
             if chart is not None:
                 charts.append(chart)
-            else:
-                logger.warning("_build_chart tra None cho task: type=%r", tr.task.type)
 
     return charts

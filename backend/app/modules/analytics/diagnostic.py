@@ -3,10 +3,10 @@
 Cap 1 — Chan doan (Diagnostic Analytics).
 Thuan Python tat dinh:
 1. Dong gop theo nhom qua window_compare().
-2. Drill-down tim nguoi dan dat thay doi (driver) va bop tach ben trong driver.
+2. Drill-down tim nguoi dan dat thay doi (driver) va boc tach ben trong driver.
 3. Tuong quan trong tung chuoi (khu hieu ung quy mo bang z-score theo nhom).
 4. Sinh FactSheet (F1, F2...) lam nguon su that duy nhat cho LLM dien giai.
-5. Sinh ChartSpec chan doan (dong gop, drill-down, tuong quan).
+5. Sinh ChartSpec chan doan (dong gop, drill-down, tuong quan) da enrich options.
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ import pandas as pd
 from ...llm_client import LLMClient
 from ...schemas import AnalysisGoal, ChartSpec, DataProfile, Fact, InsightResult, Section
 from ..business_terms import resolve_column_display
+from ..chart_generator import enrich_chart_spec
 from .series import window_compare
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,20 @@ def _fmt_num(val: float, decimals: int = 1, force_sign: bool = False) -> str:
     return f"{sign}{int_str},{parts[1]}"
 
 
+def _pick_diagnostic_group_col(goal: AnalysisGoal, profile: DataProfile, df: pd.DataFrame) -> Optional[str]:
+    """Chon cot phan nhom phu hop nhat cho chan doan (uu tien Category/Chi nhanh/Region hon Ship Mode)."""
+    primary_task = goal.tasks[0] if goal.tasks else None
+    if primary_task and primary_task.group_by and primary_task.group_by in df.columns:
+        return primary_task.group_by
+    if not profile.group_columns:
+        return None
+    high_kw = ("category", "danh_muc", "chi_nhanh", "branch", "region", "khu_vuc", "segment", "phan_khuc", "san_pham")
+    for c in profile.group_columns:
+        if any(k in c.lower() for k in high_kw) and "sub" not in c.lower():
+            return c
+    return profile.group_columns[0]
+
+
 def run_diagnostic(
     df: pd.DataFrame,
     profile: DataProfile,
@@ -49,12 +64,11 @@ def run_diagnostic(
     primary_task = goal.tasks[0] if goal.tasks else None
     metric = primary_task.metric if primary_task else profile.numeric_columns[0]
     time_col = profile.time_column or ""
-    group_col = primary_task.group_by if primary_task and primary_task.group_by else (profile.group_columns[0] if profile.group_columns else None)
+    group_col = _pick_diagnostic_group_col(goal, profile, df)
 
     metric_disp, metric_unit = resolve_column_display(metric)
     unit_str = f" {metric_unit}" if metric_unit else ""
 
-    # 1. Dong gop theo nhom (window_compare)
     n_window = 12
     if goal.time_scope == "last_3_months":
         n_window = 3
@@ -98,7 +112,6 @@ def run_diagnostic(
         )
     )
 
-    # Sắp xếp danh sách đóng góp theo mục tiêu câu hỏi (writing-block (1).md Mục 7.2)
     q_lower = goal.question.lower()
     obj = goal.objective or ""
     if obj == "top_decliners" or any(w in q_lower for w in ["giảm nhiều nhất", "làm giảm", "sụt giảm", "kéo giảm"]):
@@ -109,7 +122,6 @@ def run_diagnostic(
         comp_df["abs_delta"] = comp_df["delta"].abs()
         comp_df = comp_df.sort_values(by="abs_delta", ascending=False)
 
-    # Dong gop cua tung nhom
     fact_counter = 2
     for _, row in comp_df.iterrows():
         ent = str(row["entity"])
@@ -139,22 +151,21 @@ def run_diagnostic(
         )
         fact_counter += 1
 
-    # Bieu do 1: Cot dong gop theo nhom
     x_contrib = comp_df["entity"].tolist()
     y_contrib = [float(v) for v in comp_df["delta"].tolist()]
     group_disp, _ = resolve_column_display(group_col or "Nhóm")
-    charts.append(
-        ChartSpec(
-            chart_type="bar",
-            title=f"Đóng góp vào thay đổi {metric_disp} theo {group_disp}",
-            x=x_contrib,
-            series={f"Thay đổi {metric_disp}": y_contrib},
-            caption=f"Mức thay đổi {n_window} kỳ gần nhất so với {n_window} kỳ liền trước.",
-            display_name=metric_disp,
-            unit=metric_unit,
-            role="primary" if obj == "contribution_to_change" else "supplementary",
-        )
+    contrib_chart = ChartSpec(
+        chart_type="bar",
+        title=f"Đóng góp vào thay đổi {metric_disp} theo {group_disp}",
+        x=x_contrib,
+        series={f"Thay đổi {metric_disp}": y_contrib},
+        caption=f"Mức thay đổi {n_window} kỳ gần nhất so với {n_window} kỳ liền trước.",
+        display_name=metric_disp,
+        unit=metric_unit,
+        perspective="contribution_to_change",
+        role="primary" if obj == "contribution_to_change" else "supplementary",
     )
+    charts.append(enrich_chart_spec(contrib_chart))
 
     # 2. Drill-down: Tim nhom dan dat thay doi
     driver_row = None
@@ -165,7 +176,6 @@ def run_diagnostic(
             driver_row = match_t.iloc[0]
 
     if driver_row is None:
-        # Kiem tra neu cau hoi co nhac truc tiep den mot nhom nao do (vi du: "Đà Nẵng")
         for ent in comp_df["entity"]:
             if str(ent).lower() in q_lower:
                 match_ent = comp_df[comp_df["entity"] == ent]
@@ -187,7 +197,6 @@ def run_diagnostic(
     driver_entity = str(driver_row["entity"])
     driver_delta = float(driver_row["delta"])
 
-    # Tim cot nhom thu 2 de drill-down
     other_group_cols = [c for c in profile.group_columns if c != group_col and 2 <= df[c].nunique() <= 20]
     best_drill_col = None
     best_drill_df = None
@@ -202,7 +211,6 @@ def run_diagnostic(
                 break
 
     if best_drill_df is not None and not best_drill_df.empty:
-        # Tim danh muc anh huong lon nhat ben trong driver
         if driver_delta < 0:
             sub_leader = best_drill_df.sort_values(by="delta", ascending=True).iloc[0]
         else:
@@ -238,20 +246,19 @@ def run_diagnostic(
         )
         fact_counter += 1
 
-        # Bieu do 2: Drill-down trong driver entity
         drill_disp, _ = resolve_column_display(best_drill_col)
-        charts.append(
-            ChartSpec(
-                chart_type="bar",
-                title=f"Bóc tách thay đổi bên trong {driver_entity} theo {drill_disp}",
-                x=best_drill_df["entity"].tolist(),
-                series={f"Thay đổi {metric_disp}": [float(v) for v in best_drill_df["delta"].tolist()]},
-                caption=f"{sub_leader_name} là yếu tố tác động mạnh nhất trong {driver_entity}.",
-                display_name=metric_disp,
-                unit=metric_unit,
-                role="supplementary",
-            )
+        drill_chart = ChartSpec(
+            chart_type="bar",
+            title=f"Bóc tách thay đổi bên trong {driver_entity} theo {drill_disp}",
+            x=best_drill_df["entity"].tolist(),
+            series={f"Thay đổi {metric_disp}": [float(v) for v in best_drill_df["delta"].tolist()]},
+            caption=f"{sub_leader_name} là yếu tố tác động mạnh nhất trong {driver_entity}.",
+            display_name=metric_disp,
+            unit=metric_unit,
+            perspective="contribution_to_change",
+            role="supplementary",
         )
+        charts.append(enrich_chart_spec(drill_chart))
 
     # 3. Tuong quan: chuan hoa z-score trong tung chuoi de khu confounding quy mo
     num_cols = [c for c in profile.numeric_columns if c != metric]
@@ -268,7 +275,6 @@ def run_diagnostic(
                     s1 = grp[metric].astype(float)
                     s2 = grp[other_num].astype(float)
                     if s1.std() > 1e-6 and s2.std() > 1e-6:
-                        # z-score standardise
                         z1 = (s1 - s1.mean()) / s1.std()
                         z2 = (s2 - s2.mean()) / s2.std()
                         r = float(np.corrcoef(z1, z2)[0, 1])
@@ -280,7 +286,6 @@ def run_diagnostic(
                 correlations.append((other_num, w_avg_r))
 
         if correlations:
-            # Sort theo |r|
             correlations.sort(key=lambda x: abs(x[1]), reverse=True)
             top_corr = correlations[:5]
 
@@ -303,22 +308,19 @@ def run_diagnostic(
                 )
                 fact_counter += 1
 
-            # Bieu do 3: He so tuong quan
-            charts.append(
-                ChartSpec(
-                    chart_type="bar_horizontal",
-                    title=f"Hệ số tương quan trong từng chuỗi với {metric_disp}",
-                    x=[resolve_column_display(c)[0] for c, _ in top_corr],
-                    series={"Hệ số tương quan (r)": [round(r, 2) for _, r in top_corr]},
-                    caption="Tính sau khi chuẩn hóa z-score theo nhóm; tương quan không đồng nghĩa với nhân quả.",
-                    unit="r",
-                    role="supplementary",
-                )
+            corr_chart = ChartSpec(
+                chart_type="bar_horizontal",
+                title=f"Hệ số tương quan trong từng chuỗi với {metric_disp}",
+                x=[resolve_column_display(c)[0] for c, _ in top_corr],
+                series={"Hệ số tương quan (r)": [round(r, 2) for _, r in top_corr]},
+                caption="Tính sau khi chuẩn hóa z-score theo nhóm; tương quan không đồng nghĩa với nhân quả.",
+                unit="r",
+                role="supplementary",
             )
+            charts.append(enrich_chart_spec(corr_chart))
     elif len(num_cols) < 1:
         warnings.append("Dữ liệu chỉ có 1 cột số; bỏ qua bước phân tích tương quan.")
 
-    # 4. Dien giai: LLM tren FactSheet (hoac fallback tat dinh)
     narrative_text = _generate_diagnostic_narrative(facts, llm)
     narrative = InsightResult(insight_text=narrative_text, confidence_score=0.92)
 

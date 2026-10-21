@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import type { DeepenResponse, AnalysisLevel, ChartSpec, ChartOption } from "../api/types";
-import { ChartCard } from "./ChartCard";
+import ChartPanel from "./ChartPanel";
 import { RecommendationList } from "./RecommendationCard";
 
 interface DeepenSectionProps {
@@ -35,6 +35,16 @@ const LEVEL_TITLES: Record<AnalysisLevel, { title: string; badge: string; badgeC
   },
 };
 
+function renderFormattedText(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return <strong key={idx} style={{ color: "var(--text-primary)" }}>{part.slice(2, -2)}</strong>;
+    }
+    return <React.Fragment key={idx}>{part}</React.Fragment>;
+  });
+}
+
 export const DeepenSection: React.FC<DeepenSectionProps> = ({
   level,
   data,
@@ -65,14 +75,13 @@ export const DeepenSection: React.FC<DeepenSectionProps> = ({
 
   if (!data) return null;
 
-  // Lấy section chính và căn cứ (nếu là prescriptive)
   const mainSection = data.sections?.[0];
   const allCharts = data.sections?.flatMap((s) => s.charts || []) || [];
   const baseSections = data.sections?.filter((s) => s.level !== "prescriptive") || [];
+  const realWarnings = (data.warnings || []).filter((w) => !w.toLowerCase().includes("chính sách"));
 
   return (
     <div className="deepen-section-card" role="region" aria-label={info.title}>
-      {/* Header cấp phân tích */}
       <div className="deepen-section-header">
         <div className="deepen-section-title-group">
           <h3 className="deepen-section-title">{info.title}</h3>
@@ -88,28 +97,24 @@ export const DeepenSection: React.FC<DeepenSectionProps> = ({
         )}
       </div>
 
-      {/* Cảnh báo nếu có */}
-      {data.warnings && data.warnings.length > 0 && (
+      {realWarnings.length > 0 && (
         <div className="section-warnings">
-          {data.warnings.map((w, i) => (
+          {realWarnings.map((w, i) => (
             <div key={i}>⚠️ {w}</div>
           ))}
         </div>
       )}
 
-      {/* Nhận xét AI hoặc lời diễn giải */}
       {mainSection?.narrative?.insight_text && (
         <div className="section-narrative">
-          {mainSection.narrative.insight_text}
+          {renderFormattedText(mainSection.narrative.insight_text)}
         </div>
       )}
 
-      {/* Cấp Prescriptive: Thẻ khuyến nghị trích dẫn Fact */}
       {level === "prescriptive" && (
         <>
           <RecommendationList recommendations={data.recommendations} facts={data.facts} />
 
-          {/* Khối căn cứ chẩn đoán & dự báo thu gọn */}
           {baseSections.length > 0 && (
             <div className="collapsible-bases">
               <div
@@ -138,19 +143,16 @@ export const DeepenSection: React.FC<DeepenSectionProps> = ({
                       </h5>
                       {sec.narrative?.insight_text && (
                         <div style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                          {sec.narrative.insight_text}
+                          {renderFormattedText(sec.narrative.insight_text)}
                         </div>
                       )}
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "12px" }}>
-                        {(sec.charts || []).map((chart, cIdx) => (
-                          <ChartCard
-                            key={cIdx}
-                            chart={chart}
-                            onSwitchChart={onSwitchChart}
-                            onResetToAuto={onResetToAuto}
-                          />
-                        ))}
-                      </div>
+                      {sec.charts && sec.charts.length > 0 && (
+                        <ChartPanel
+                          charts={sec.charts}
+                          onSwitchChart={onSwitchChart}
+                          onResetToAuto={onResetToAuto}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -160,18 +162,12 @@ export const DeepenSection: React.FC<DeepenSectionProps> = ({
         </>
       )}
 
-      {/* Biểu đồ chuyên sâu của cấp (Diagnostic hoặc Forecast) */}
       {level !== "prescriptive" && allCharts.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
-          {allCharts.map((chart, idx) => (
-            <ChartCard
-              key={idx}
-              chart={chart}
-              onSwitchChart={onSwitchChart}
-              onResetToAuto={onResetToAuto}
-            />
-          ))}
-        </div>
+        <ChartPanel
+          charts={allCharts}
+          onSwitchChart={onSwitchChart}
+          onResetToAuto={onResetToAuto}
+        />
       )}
     </div>
   );

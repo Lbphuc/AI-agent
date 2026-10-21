@@ -362,7 +362,6 @@ export default function App() {
       e?.preventDefault();
       if (!canSubmit || !file) return;
 
-      // Hủy request trước đó nếu còn đang chạy
       abortControllerRef.current?.abort();
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
@@ -384,7 +383,6 @@ export default function App() {
       );
 
       try {
-        // Bước 1: Gọi /interpret để hiểu câu hỏi và kiểm tra tính hợp lệ của biểu đồ (chart_check)
         const interp = await interpretQuestion(
           file,
           question.trim(),
@@ -397,7 +395,6 @@ export default function App() {
 
         setInterpretResponse(interp);
 
-        // Kiểm tra chart_check TRƯỚC khi chạy phân tích nặng
         if (interp.chart_check) {
           const verdict = interp.chart_check;
           const isBlocked = verdict.status === "blocked" || Boolean(verdict.requires_double_confirm);
@@ -436,7 +433,6 @@ export default function App() {
           }
         }
 
-        // Bước 2: Chạy song song các nhánh phân tích
         await executeAnalysis(interp, allAcks, currentRunId, abortController, activeCharts);
       } catch (err) {
         if (runIdRef.current === currentRunId && !abortController.signal.aborted) {
@@ -459,12 +455,10 @@ export default function App() {
   );
 
   // Đổi pill sau khi đã có kết quả -> chạy bù cấp còn thiếu
-  // Nếu biểu đồ đã chọn bị chặn ở chiến lược mới -> tự động chuyển về Tự động
   const handleModeChange = useCallback(
     async (newMode: AnalysisMode) => {
       setMode(newMode);
 
-      // Kiểm tra ma trận: nếu chartPref rơi vào ô ✕ của newMode -> tự động về null
       if (chartPref && profile?.chart_catalog) {
         const levelKey = newMode === "auto" ? "descriptive" : newMode;
         const catalogItems = profile.chart_catalog[levelKey] || [];
@@ -487,7 +481,7 @@ export default function App() {
 
       for (const lvl of targetLevels) {
         if (lvl === "descriptive") continue;
-        if (deepenResults[lvl]) continue; // Đã có rồi, không cần gọi lại
+        if (deepenResults[lvl]) continue;
 
         setDeepenLoading((prev) => ({ ...prev, [lvl]: true }));
         try {
@@ -534,7 +528,6 @@ export default function App() {
     questionRef.current?.focus();
   }, []);
 
-  // Xử lý khi người dùng chọn "Vẫn dùng" trong hộp thoại xác nhận
   const handleConfirmOverride = useCallback((newCodes: string[]) => {
     const updated = Array.from(new Set([...ackCodes, ...getSessionAcks(), ...newCodes]));
     setAckCodes(updated);
@@ -552,7 +545,6 @@ export default function App() {
     }
   }, [ackCodes, handleSubmit]);
 
-  // Xử lý khi người dùng chấp nhận gợi ý biểu đồ an toàn
   const handleAcceptSuggestion = useCallback((altChart: ChartType) => {
     setSelectedCharts([altChart]);
     setIsConfirmOpen(false);
@@ -562,7 +554,6 @@ export default function App() {
     setTimeout(() => handleSubmit(undefined, undefined, [altChart]), 50);
   }, [handleSubmit]);
 
-  // Hủy hộp thoại xác nhận
   const handleConfirmCancel = useCallback(() => {
     setIsConfirmOpen(false);
     setConfirmVerdict(null);
@@ -646,6 +637,22 @@ export default function App() {
             charts: prev.charts.map((c) => (c.title === targetChart.title ? newSpec : c)),
           };
         });
+        setDeepenResults((prev) => {
+          const next = { ...prev };
+          for (const k of Object.keys(next) as AnalysisLevel[]) {
+            const dr = next[k];
+            if (dr?.sections) {
+              next[k] = {
+                ...dr,
+                sections: dr.sections.map((sec) => ({
+                  ...sec,
+                  charts: sec.charts.map((c) => (c.title === targetChart.title ? newSpec : c)),
+                })),
+              };
+            }
+          }
+          return next;
+        });
       } catch (err) {
         if (err instanceof ArbitrationError) {
           setConfirmVerdict(err.verdict || null);
@@ -655,7 +662,6 @@ export default function App() {
         }
       }
     } else {
-      // Cùng data_shape: Đổi tức thì ở client
       setDescriptiveResult((prev) => {
         if (!prev) return prev;
         return {
@@ -665,22 +671,98 @@ export default function App() {
           ),
         };
       });
+      setDeepenResults((prev) => {
+        const next = { ...prev };
+        for (const k of Object.keys(next) as AnalysisLevel[]) {
+          const dr = next[k];
+          if (dr?.sections) {
+            next[k] = {
+              ...dr,
+              sections: dr.sections.map((sec) => ({
+                ...sec,
+                charts: sec.charts.map((c) =>
+                  c.title === targetChart.title ? { ...c, chart_type: option.chart_type } : c
+                ),
+              })),
+            };
+          }
+        }
+        return next;
+      });
     }
   };
 
-  // Đổi về Tự động từ nút trên thẻ
   const handleResetCardToAuto = useCallback(() => {
     setChartPref(null);
     handleSubmit();
   }, [handleSubmit]);
 
-  // Đếm số góc nhìn bổ sung
-  const supplementaryCount = useMemo(() => {
-    if (!descriptiveResult?.charts) return 0;
-    return descriptiveResult.charts.filter((c) => c.role === "supplementary").length;
-  }, [descriptiveResult]);
+  // Xác định cấp độ phân tích trọng tâm (Primary Focus Level) theo câu hỏi
+  const effectivePrimaryLevel: AnalysisLevel = useMemo(() => {
+    if (mode !== "auto") return mode;
+    const obj = interpretResponse?.goal?.objective;
+    const lvls = interpretResponse?.goal?.levels || interpretResponse?.levels || [];
+    if (obj === "contribution_to_change" || obj === "top_decliners" || lvls.includes("diagnostic")) {
+      if (obj === "forecast") return "forecast";
+      if (obj === "prescriptive_action") return "prescriptive";
+      return "diagnostic";
+    }
+    if (obj === "forecast" || lvls.includes("forecast")) {
+      return "forecast";
+    }
+    if (obj === "prescriptive_action" || lvls.includes("prescriptive")) {
+      return "prescriptive";
+    }
+    return "descriptive";
+  }, [mode, interpretResponse]);
 
-  // Chuỗi khoảng thời gian
+  // Khử trùng lặp biểu đồ giữa phần chuyên sâu (Forecast/Diagnostic) và phần Mô tả (Descriptive)
+  const visibleDescriptiveCharts: ChartSpec[] = useMemo(() => {
+    const rawCharts = descriptiveResult?.charts || [];
+    if (!rawCharts.length) return [];
+
+    const hasForecastChart =
+      !dismissedLevels.has("forecast") &&
+      (deepenResults.forecast?.sections?.[0]?.charts?.length || 0) > 0;
+    const hasDiagnosticChart =
+      !dismissedLevels.has("diagnostic") &&
+      (deepenResults.diagnostic?.sections?.[0]?.charts?.length || 0) > 0;
+
+    return rawCharts.filter((c) => {
+      // Nếu đã hiển thị biểu đồ Dự báo (gồm cả chuỗi lịch sử + tương lai) trên đỉnh,
+      // ẩn biểu đồ đường Xu hướng đơn lẻ bị lặp lại ở phần mô tả
+      if (
+        hasForecastChart &&
+        effectivePrimaryLevel === "forecast" &&
+        c.role === "primary" &&
+        (c.chart_type === "line" || c.chart_type === "area") &&
+        Object.keys(c.series || {}).length === 1
+      ) {
+        return false;
+      }
+      // Nếu đã hiển thị biểu đồ Chẩn đoán Đóng góp ở trên, ẩn biểu đồ đóng góp phụ bị lặp
+      if (hasDiagnosticChart && c.perspective === "contribution_to_change") {
+        return false;
+      }
+      return true;
+    });
+  }, [descriptiveResult, deepenResults, dismissedLevels, effectivePrimaryLevel]);
+
+  const supplementaryCount = useMemo(() => {
+    return visibleDescriptiveCharts.filter((c) => c.role === "supplementary").length;
+  }, [visibleDescriptiveCharts]);
+
+  const totalChartCount = useMemo(() => {
+    let count = visibleDescriptiveCharts.length;
+    if (!dismissedLevels.has("diagnostic")) {
+      count += deepenResults.diagnostic?.sections?.reduce((acc, s) => acc + (s.charts?.length || 0), 0) || 0;
+    }
+    if (!dismissedLevels.has("forecast")) {
+      count += deepenResults.forecast?.sections?.reduce((acc, s) => acc + (s.charts?.length || 0), 0) || 0;
+    }
+    return count;
+  }, [visibleDescriptiveCharts, deepenResults, dismissedLevels]);
+
   const timeRangeStr = useMemo(() => {
     const goal = descriptiveResult?.goal || interpretResponse?.goal;
     if (!goal) return null;
@@ -688,22 +770,6 @@ export default function App() {
     if (time_start && time_end) return `${time_start} – ${time_end}`;
     return null;
   }, [descriptiveResult, interpretResponse]);
-
-  // Xác định cấp độ phân tích trọng tâm (Primary Focus Level) theo câu hỏi
-  const effectivePrimaryLevel: AnalysisLevel = useMemo(() => {
-    if (mode !== "auto") return mode;
-    const obj = interpretResponse?.goal?.objective;
-    if (obj === "contribution_to_change" || obj === "top_decliners" || (interpretResponse?.goal?.levels && interpretResponse.goal.levels[0] === "diagnostic")) {
-      return "diagnostic";
-    }
-    if (obj === "forecast" || (interpretResponse?.goal?.levels && interpretResponse.goal.levels[0] === "forecast")) {
-      return "forecast";
-    }
-    if (obj === "prescriptive_action" || (interpretResponse?.goal?.levels && interpretResponse.goal.levels[0] === "prescriptive")) {
-      return "prescriptive";
-    }
-    return "descriptive";
-  }, [mode, interpretResponse]);
 
   const primaryMethodName = useMemo(() => {
     switch (effectivePrimaryLevel) {
@@ -718,7 +784,6 @@ export default function App() {
     }
   }, [effectivePrimaryLevel]);
 
-  // Model dữ liệu báo cáo cho trang in ẩn (#print-root)
   const reportModel = useMemo(() => {
     if (!descriptiveResult) return null;
     return buildReportModel(
@@ -730,7 +795,6 @@ export default function App() {
     );
   }, [descriptiveResult, file, exportSections, reportOrgName, deepenResults]);
 
-  // Xử lý xuất báo cáo theo các định dạng
   const handleExport = useCallback(
     async (format: ExportFormat, sections: ExportSections, orgName: string) => {
       if (!descriptiveResult) return;
@@ -756,16 +820,12 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      {/* ── 1. HEADER CỐ ĐỊNH 56px ── */}
       <AppHeader />
 
       <div className="app-main-layout">
-        {/* ── 2. THANH BÊN ĐIỀU HƯỚNG (RAIL) ── */}
         <AppRail activeId={activeRailId} onSelect={setActiveRailId} />
 
-        {/* ── 3. KHU VỰC NỘI DUNG CHÍNH ── */}
         <div className="app-content-wrapper">
-          {/* Thanh truy vấn thu gọn (chỉ hiện khi đã có kết quả trong workspace) */}
           {hasResult && !isFormExpanded && (
             <QueryBar
               filename={file?.name || "data.csv"}
@@ -775,7 +835,6 @@ export default function App() {
             />
           )}
 
-          {/* TRƯỜNG HỢP 1: LANDING STATE (Chưa có kết quả hoặc đang bấm Sửa) */}
           {(!hasResult || isFormExpanded) && (
             <main className="landing-content">
               {!hasResult && (
@@ -795,7 +854,6 @@ export default function App() {
                 </section>
               )}
 
-              {/* Form truy vấn */}
               <form className="query-card" onSubmit={handleSubmit} noValidate>
                 <div className="form-group">
                   <label className="form-label">
@@ -818,7 +876,6 @@ export default function App() {
                     Chế độ phân tích & Câu hỏi
                   </label>
 
-                  {/* 1. Hàng chọn Pills Chiến lược */}
                   <ModePicker
                     currentMode={mode}
                     onModeChange={handleModeChange}
@@ -826,7 +883,6 @@ export default function App() {
                     disabled={isLoading}
                   />
 
-                  {/* 2. Hàng chọn Biểu đồ tùy ý theo chiến lược */}
                   <div className="chart-picker-row">
                     <div className="chart-picker-label-group">
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -845,7 +901,6 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Thông báo nếu biểu đồ tự động reset do chế độ mới không hỗ trợ */}
                   {strategyToast && (
                     <div className="strategy-toast" role="status">
                       <span>ℹ</span>
@@ -869,7 +924,6 @@ export default function App() {
                   <div className="question-hint">Nhấn Ctrl + Enter để gửi câu hỏi</div>
                 </div>
 
-                {/* Câu hỏi gợi ý theo mode */}
                 <div className="example-questions">
                   <span className="example-label">Gợi ý:</span>
                   {exampleQuestions.map((q) => (
@@ -928,7 +982,6 @@ export default function App() {
                 </div>
               </form>
 
-              {/* Trạng thái đang tải */}
               {isLoading && (
                 <div className="loading-card">
                   <div className="loading-steps">
@@ -949,7 +1002,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* Thông báo lỗi */}
               {appState === "error" && errorMsg && (
                 <div className="error-card">
                   <div>
@@ -961,18 +1013,15 @@ export default function App() {
             </main>
           )}
 
-          {/* TRƯỜNG HỢP 2: WORKSPACE STATE (Kết quả hiển thị ngay màn đầu) */}
           {hasResult && (
             <main className="workspace-content" ref={resultRef}>
-              {/* Thanh công cụ kết quả */}
               <ResultToolbar
-                chartCount={(descriptiveResult?.charts.length || 0) + (deepenResults.diagnostic?.sections[0]?.charts.length || 0)}
+                chartCount={totalChartCount}
                 timeRangeStr={timeRangeStr}
                 primaryMethod={primaryMethodName}
                 onOpenExport={() => setIsExportOpen(true)}
               />
 
-              {/* Hộp tóm tắt mục tiêu & Notices */}
               {interpretResponse?.goal_summary && (
                 <div className="goal-summary-card">
                   <div className="goal-summary-title">
@@ -1045,13 +1094,14 @@ export default function App() {
                   insight={descriptiveResult.insight}
                   goal={descriptiveResult.goal}
                   meta={descriptiveResult.meta}
+                  hideGoalSummary={Boolean(interpretResponse?.goal_summary)}
                 />
               )}
 
-              {/* Lưới biểu đồ chính và góc nhìn bổ sung (Mô tả) */}
-              {descriptiveResult?.charts && descriptiveResult.charts.length > 0 && (
+              {/* Lưới biểu đồ chính và góc nhìn bổ sung (đã khử biểu đồ trùng lặp) */}
+              {visibleDescriptiveCharts.length > 0 && (
                 <ChartPanel
-                  charts={descriptiveResult.charts}
+                  charts={visibleDescriptiveCharts}
                   onSwitchChart={handleSwitchChart}
                   onResetToAuto={handleResetCardToAuto}
                 />
@@ -1088,7 +1138,6 @@ export default function App() {
                 />
               )}
 
-              {/* Gợi ý hỏi tiếp */}
               <div className="followup-card">
                 <div className="followup-header">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1112,14 +1161,12 @@ export default function App() {
             </main>
           )}
 
-          {/* Footer */}
           <footer className="app-footer">
             AI Agent BI — Hệ thống trực quan hóa & Phân tích Dữ liệu Kinh doanh 4 Cấp độ Thông minh
           </footer>
         </div>
       </div>
 
-      {/* ── 4. HỘP THOẠI XÁC NHẬN / CẢNH BÁO BIỂU ĐỒ (ChartConfirmDialog) ── */}
       <ChartConfirmDialog
         isOpen={isConfirmOpen}
         verdict={confirmVerdict}
@@ -1139,7 +1186,6 @@ export default function App() {
         onCancel={handleConfirmCancel}
       />
 
-      {/* ── 5. MODAL XUẤT BÁO CÁO ── */}
       <ExportDialog
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
@@ -1147,7 +1193,6 @@ export default function App() {
         onExport={handleExport}
       />
 
-      {/* ── 6. KHỐI IN VECTOR ẨN (#print-root) CHO BÁO CÁO A4 ── */}
       {reportModel && (() => {
         const printContainer = document.getElementById("print-root");
         if (printContainer) {

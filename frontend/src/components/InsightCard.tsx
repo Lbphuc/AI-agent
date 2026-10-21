@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import type { InsightResult, AnalysisGoal, ReportMeta } from "../api/types";
 import "./InsightCard.css";
 
@@ -6,9 +6,20 @@ interface Props {
   insight: InsightResult;
   goal: AnalysisGoal;
   meta?: ReportMeta | null;
+  hideGoalSummary?: boolean;
 }
 
-export default function InsightCard({ insight, goal, meta }: Props) {
+function renderFormattedInsight(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return <strong key={idx}>{part.slice(2, -2)}</strong>;
+    }
+    return <React.Fragment key={idx}>{part}</React.Fragment>;
+  });
+}
+
+export default function InsightCard({ insight, goal, meta, hideGoalSummary = false }: Props) {
   const [copied, setCopied] = useState(false);
   const [showTechDetails, setShowTechDetails] = useState(false);
 
@@ -42,7 +53,7 @@ export default function InsightCard({ insight, goal, meta }: Props) {
               <line x1="9" y1="21" x2="15" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </div>
-          <h2 className="insight-heading">Nhận xét phân tích</h2>
+          <h2 className="insight-heading">Nhận xét tổng quan</h2>
         </div>
 
         <button className="btn-copy" onClick={handleCopy} title="Sao chép nội dung nhận xét">
@@ -65,19 +76,16 @@ export default function InsightCard({ insight, goal, meta }: Props) {
         </button>
       </div>
 
-      {/* Goal Summary */}
-      {goalSummary && (
+      {!hideGoalSummary && goalSummary && (
         <div className="insight-goal-summary">
           <strong>Hệ thống hiểu câu hỏi của bạn là:</strong> {goalSummary}
         </div>
       )}
 
-      {/* Insight Text */}
       <div className="insight-body">
-        <p className="insight-text">{insight.insight_text}</p>
+        <p className="insight-text">{renderFormattedInsight(insight.insight_text)}</p>
       </div>
 
-      {/* Cảnh báo chỉ hiện khi độ tin cậy thấp (< 0.8) */}
       {isLowConfidence && (
         <div className="insight-warning-box">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -89,7 +97,6 @@ export default function InsightCard({ insight, goal, meta }: Props) {
         </div>
       )}
 
-      {/* Chi tiết kỹ thuật thu gọn */}
       <div className="tech-details-container">
         <button
           className="tech-details-toggle"

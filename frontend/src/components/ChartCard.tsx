@@ -39,16 +39,15 @@ const PALETTE = [
   "var(--chart-8)",
 ];
 
-// Bảng màu HEX chuẩn Okabe–Ito cho SVG gradient & phần tử không tương thích CSS var
 const HEX_PALETTE = [
-  "#56B4E9", // Okabe–Ito Sky Blue
-  "#E69F00", // Okabe–Ito Orange
-  "#2BC4A0", // Okabe–Ito Green
-  "#CC79A7", // Okabe–Ito Magenta
-  "#F0E442", // Okabe–Ito Yellow
-  "#7C9CFF", // Indigo
-  "#E07B54", // Vermilion
-  "#B0B8C8", // Slate
+  "#56B4E9",
+  "#E69F00",
+  "#2BC4A0",
+  "#CC79A7",
+  "#F0E442",
+  "#7C9CFF",
+  "#E07B54",
+  "#B0B8C8",
 ];
 
 interface ChartCardProps {
@@ -74,7 +73,6 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, onSwitchChart, onRe
   const isShare = currentChart.perspective === "share_of_total";
   const isForecast = !!currentChart.forecast_from || !!currentChart.band;
 
-  // Chuẩn hóa dữ liệu cho Recharts (hỗ trợ Optional/null an toàn)
   const chartData = (currentChart.x || []).map((xVal, i) => {
     const pt: Record<string, string | number | null> = { name: xVal };
     for (const k of seriesKeys) {
@@ -130,7 +128,6 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, onSwitchChart, onRe
 
   return (
     <div className="chart-card" ref={cardRef}>
-      {/* Header thẻ */}
       <div className="chart-card-header">
         <div className="header-text-group">
           <h3 className="chart-card-title">{currentChart.title}</h3>
@@ -167,7 +164,6 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, onSwitchChart, onRe
           </div>
         </div>
 
-        {/* Menu 3 chấm */}
         <div className="chart-menu-wrapper no-export">
           <button
             className="chart-menu-trigger"
@@ -195,7 +191,6 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, onSwitchChart, onRe
                 Tải bảng CSV
               </button>
 
-              {/* Menu Đổi loại biểu đồ (options được tính từ backend) */}
               {currentChart.options && currentChart.options.length > 0 && (
                 <>
                   <div className="chart-menu-divider" />
@@ -229,7 +224,6 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, onSwitchChart, onRe
         </div>
       </div>
 
-      {/* Vùng vẽ biểu đồ */}
       <div className="chart-canvas-wrapper">
         {activeChartType === "kpi" || currentChart.data_shape === "kpi" ? (
           renderKpiCard(currentChart)
@@ -238,13 +232,12 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, onSwitchChart, onRe
         ) : activeChartType === "box" || currentChart.data_shape === "boxes" ? (
           renderBoxPlot(currentChart, seriesKeys)
         ) : (
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={305}>
             {renderChartByType(currentChart, chartData, seriesKeys, isContribution, isShare, isForecast, activeChartType, cardUid)}
           </ResponsiveContainer>
         )}
       </div>
 
-      {/* Caption chú thích */}
       {currentChart.caption && (
         <div className="chart-card-caption">
           <span className="caption-bar">▎</span>
@@ -252,7 +245,6 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, onSwitchChart, onRe
         </div>
       )}
 
-      {/* Ghi chú cảnh báo / lưu ý (notes) */}
       {currentChart.notes && currentChart.notes.length > 0 && (
         <div className="chart-card-notes">
           {currentChart.notes.map((note, idx) => (
@@ -267,9 +259,6 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, onSwitchChart, onRe
   );
 };
 
-/**
- * Hiển thị Thẻ KPI
- */
 function renderKpiCard(chart: ChartSpec) {
   const kpiVal = chart.kpi_value !== null && chart.kpi_value !== undefined
     ? chart.kpi_value
@@ -307,9 +296,6 @@ function renderKpiCard(chart: ChartSpec) {
   );
 }
 
-/**
- * Hiển thị Bản đồ nhiệt (Heatmap) dạng bảng ma trận HTML chuẩn
- */
 function renderHeatmap(chart: ChartSpec, seriesKeys: string[]) {
   const rawVals = (Object.values(chart.series || {})[0] || []).filter((v): v is number => v !== null && !isNaN(Number(v)));
   const computedMin = rawVals.length > 0 ? Math.min(...rawVals) : 0;
@@ -428,9 +414,6 @@ function renderHeatmap(chart: ChartSpec, seriesKeys: string[]) {
   );
 }
 
-/**
- * Hiển thị Biểu đồ hộp (Box Plot)
- */
 function renderBoxPlot(chart: ChartSpec, seriesKeys: string[]) {
   const rawVals = (Object.values(chart.series || {})[0] || []).filter((v): v is number => v !== null && !isNaN(Number(v)));
   const fallbackMin = rawVals.length > 0 ? Math.min(...rawVals) : 0;
@@ -530,9 +513,6 @@ function renderBoxPlot(chart: ChartSpec, seriesKeys: string[]) {
   );
 }
 
-/**
- * Vẽ Recharts theo từng loại biểu đồ
- */
 function renderChartByType(
   chart: ChartSpec,
   data: Record<string, any>[],
@@ -548,7 +528,6 @@ function renderChartByType(
   );
   const isSigned = isContribution || chart.perspective === "period_change" || (chart.unit === "%" && hasNegative) || hasNegative;
 
-  // Biểu đồ Phân tán (Scatter)
   if (chartType === "scatter" || chart.data_shape === "points") {
     const scatterData = (chart.scatter_points && chart.scatter_points.length > 0)
       ? chart.scatter_points
@@ -610,17 +589,14 @@ function renderChartByType(
     );
   }
 
-  // Bản đồ Nhiệt (Heatmap)
   if (chartType === "heatmap" || chart.data_shape === "matrix") {
     return renderHeatmap(chart, seriesKeys);
   }
 
-  // Biểu đồ Hộp (Box Plot)
   if (chartType === "box" || chart.data_shape === "boxes") {
     return renderBoxPlot(chart, seriesKeys);
   }
 
-  // Biểu đồ Tần suất (Histogram)
   if (chartType === "histogram" || chart.data_shape === "bins") {
     const bins = (chart.histogram_bins && chart.histogram_bins.length > 0)
       ? chart.histogram_bins
@@ -686,7 +662,6 @@ function renderChartByType(
     );
   }
 
-  // Biểu đồ Thác nước (Waterfall)
   if (chartType === "waterfall" || chart.data_shape === "waterfall") {
     const steps: WaterfallStep[] = (chart.waterfall_steps && chart.waterfall_steps.length > 0)
       ? chart.waterfall_steps
@@ -787,7 +762,6 @@ function renderChartByType(
     );
   }
 
-  // Biểu đồ Cột ngang (Bar Horizontal)
   if (chartType === "bar_horizontal") {
     return (
       <BarChart
@@ -805,8 +779,8 @@ function renderChartByType(
           tickFormatter={(v) => (chart.unit === "%" ? formatPercent(v) : formatNumber(v))}
           domain={isSigned ? [(dataMin: number) => Math.min(0, dataMin), (dataMax: number) => Math.max(0, dataMax)] : undefined}
         />
-        <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" width={85} />
-        {isSigned && <ReferenceLine x={0} stroke="var(--border)" strokeWidth={1.5} />}
+        <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" width={95} />
+        {isSigned && <ReferenceLine x={0} stroke="rgba(148, 163, 184, 0.55)" strokeWidth={1.5} />}
         <Tooltip content={<CustomChartTooltip unit={chart.unit} isContribution={isContribution} isSigned={isSigned} />} />
         <Legend />
         {seriesKeys.map((k, sIdx) => {
@@ -831,7 +805,6 @@ function renderChartByType(
     );
   }
 
-  // Biểu đồ Cột chồng (Stacked Bar)
   if (chartType === "stacked_bar") {
     return (
       <BarChart
@@ -867,7 +840,7 @@ function renderChartByType(
     );
   }
 
-  // Biểu đồ Tròn (Pie)
+  // Biểu đồ Tròn / Donut (Pie) — chuẩn hóa tỷ trọng không bị lệch làm tròn 0.1%
   if (chartType === "pie") {
     const rawEntries = (chart.x || []).map((name, i) => {
       const rawVal = Number(chart.series[seriesKeys[0]]?.[i] ?? 0);
@@ -879,10 +852,11 @@ function renderChartByType(
     });
 
     const totalAbs = rawEntries.reduce((sum, item) => sum + item.value, 0);
+    const isAlreadyPct = chart.unit === "%" && Math.abs(totalAbs - 100) <= 0.5;
 
     const pieData = rawEntries.map((item) => ({
       ...item,
-      sharePct: totalAbs > 0 ? (item.value / totalAbs) * 100 : 0,
+      sharePct: isAlreadyPct ? item.value : (totalAbs > 0 ? (item.value / totalAbs) * 100 : 0),
     }));
 
     return (
@@ -900,12 +874,14 @@ function renderChartByType(
                     <span className="tooltip-name">Tỷ trọng:</span>
                     <span className="tooltip-val">{formatPercent(item.sharePct, 1)}</span>
                   </div>
-                  <div className="tooltip-item">
-                    <span className="tooltip-name">Giá trị thực tế:</span>
-                    <span className="tooltip-val">
-                      {formatSignedChange(item.rawVal, chart.unit || undefined).text}
-                    </span>
-                  </div>
+                  {!isAlreadyPct && (
+                    <div className="tooltip-item">
+                      <span className="tooltip-name">Giá trị thực tế:</span>
+                      <span className="tooltip-val">
+                        {formatNumber(item.rawVal)} {chart.unit || ""}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -917,10 +893,11 @@ function renderChartByType(
           dataKey="value"
           nameKey="name"
           cx="50%"
-          cy="50%"
-          outerRadius={95}
-          innerRadius={0}
-          paddingAngle={0}
+          cy="48%"
+          outerRadius={92}
+          innerRadius={52}
+          paddingAngle={2}
+          cornerRadius={4}
           stroke="var(--bg-card, #0f172a)"
           strokeWidth={1.5}
           label={({ name, payload }: any) => {
@@ -941,7 +918,6 @@ function renderChartByType(
     );
   }
 
-  // ComposedChart / Forecast chart - phân biệt rõ ràng giữa Area, Bar và Line trong chế độ Dự báo
   if (isForecast) {
     const isAreaMode = chartType === "area";
     const isBarMode = chartType === "bar";
@@ -966,7 +942,6 @@ function renderChartByType(
               </linearGradient>
             );
           })}
-          {/* Gradient riêng cho chuỗi Dự báo (Vàng hổ phách nổi bật) */}
           <linearGradient id={`${cardUid}_fcArea_forecast`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#eab308" stopOpacity={0.65} style={{ stopColor: "#eab308", stopOpacity: 0.65 }} />
             <stop offset="70%" stopColor="#eab308" stopOpacity={0.25} style={{ stopColor: "#eab308", stopOpacity: 0.25 }} />
@@ -987,7 +962,6 @@ function renderChartByType(
         <Tooltip content={<CustomChartTooltip unit={chart.unit} />} />
         <Legend />
 
-        {/* Dải tin cậy 80% */}
         {chart.band && (
           <>
             <Area
@@ -1013,12 +987,10 @@ function renderChartByType(
           </>
         )}
 
-        {/* Vẽ từng chuỗi dữ liệu tùy theo loại biểu đồ (Area / Bar / Line) */}
         {seriesKeys.map((k, i) => {
           const isForecastKey = k.toLowerCase().includes("dự báo") || k.toLowerCase().includes("forecast");
           const hex = HEX_PALETTE[i % HEX_PALETTE.length];
 
-          // 1. Nếu người dùng chọn Biểu đồ miền (Area): vẽ vùng phủ màu rõ ràng
           if (isAreaMode) {
             const fillUrl = isForecastKey ? `url(#${cardUid}_fcArea_forecast)` : `url(#${cardUid}_fcArea_${i})`;
             return (
@@ -1028,7 +1000,7 @@ function renderChartByType(
                 dataKey={k}
                 name={chart.display_name && seriesKeys.length === 1 ? chart.display_name : k}
                 stroke={isForecastKey ? "#eab308" : hex}
-                strokeWidth={isForecastKey ? 2.5 : 2.5}
+                strokeWidth={2.5}
                 strokeDasharray={isForecastKey ? "5 5" : undefined}
                 fill={fillUrl}
                 fillOpacity={1}
@@ -1038,7 +1010,6 @@ function renderChartByType(
             );
           }
 
-          // 2. Nếu người dùng chọn Biểu đồ cột (Bar): vẽ dạng cột dọc
           if (isBarMode) {
             return (
               <Bar
@@ -1052,7 +1023,6 @@ function renderChartByType(
             );
           }
 
-          // 3. Mặc định là Biểu đồ đường (Line): chỉ vẽ đường kẻ thanh mảnh, không đổ bóng màu nền
           return (
             <Line
               key={k}
@@ -1087,7 +1057,6 @@ function renderChartByType(
     );
   }
 
-  // Biểu đồ miền (Area) ở chế độ thông thường
   if (chartType === "area") {
     return (
       <AreaChart data={data} accessibilityLayer={false} margin={{ top: 12, right: 16, left: 16, bottom: 25 }}>
@@ -1142,7 +1111,6 @@ function renderChartByType(
     );
   }
 
-  // Biểu đồ đường (Line) ở chế độ thông thường
   if (chartType === "line") {
     return (
       <LineChart data={data} accessibilityLayer={false} margin={{ top: 12, right: 16, left: 16, bottom: 25 }}>
@@ -1176,13 +1144,12 @@ function renderChartByType(
     );
   }
 
-  // BarChart (Cột dọc chuẩn)
   return (
     <BarChart
       data={data}
       accessibilityLayer={false}
-      barCategoryGap="25%"
-      maxBarSize={72}
+      barCategoryGap={data.length > 16 ? "14%" : "25%"}
+      maxBarSize={68}
       margin={{ top: 12, right: 16, left: 16, bottom: 25 }}
     >
       <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
@@ -1199,7 +1166,7 @@ function renderChartByType(
         tickFormatter={(v) => (chart.unit === "%" ? formatPercent(v) : formatNumber(v))}
         domain={isSigned ? [(dataMin: number) => Math.min(0, dataMin), (dataMax: number) => Math.max(0, dataMax)] : undefined}
       />
-      {isSigned && <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1.5} />}
+      {isSigned && <ReferenceLine y={0} stroke="rgba(148, 163, 184, 0.55)" strokeWidth={1.5} />}
       <Tooltip content={<CustomChartTooltip unit={chart.unit} isContribution={isContribution} isSigned={isSigned} />} />
       <Legend />
       {seriesKeys.map((k, sIdx) => (
@@ -1221,9 +1188,6 @@ function renderChartByType(
   );
 }
 
-/**
- * Custom Tooltip định dạng chuẩn tiếng Việt, có biểu tượng tăng/giảm và đơn vị
- */
 function CustomChartTooltip({
   active,
   payload,

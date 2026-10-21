@@ -1,11 +1,6 @@
 """AI Agent - Phân tích & Trực quan hóa Dữ liệu Kinh doanh.
 
-Điểm khởi đầu ứng dụng FastAPI. Tuần 1-2: /health, /profile (chạy O1).
-Tuần 3: thêm /interpret (chạy O1 + O2), /profile-many (nhiều file).
-Tuần 3 (bổ sung): hỗ trợ Excel (.xlsx) + fallback encoding CSV + Stage 0
-làm sạch dữ liệu trong O1 (xem FR-12, ARCHITECTURE.md mục 6).
-Endpoint /analyze (ghép đủ 5 module) sẽ hoàn thiện dần đến Tuần 6 —
-xem kế hoạch chi tiết tại docs/SRS.md (mục 3) và docs/ARCHITECTURE.md.
+Điểm khởi đầu ứng dụng FastAPI.
 """
 from __future__ import annotations
 
@@ -19,7 +14,6 @@ from pathlib import Path
 from urllib.parse import quote
 from typing import Optional
 
-# Dam bao terminal Windows khong bi loi charmap khi in log/ky tu dac biet
 if hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -140,9 +134,6 @@ async def unhandled_exception_handler(request, exc):
     )
 
 
-# Them som tu Tuan 2 de tranh chan tich hop frontend (React) o Tuan 7.
-# TODO (truoc khi trien khai that): gioi han allow_origins ve dung domain
-# frontend thuc te thay vi "*" - hien tai de rong cho tien phat trien/demo.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -150,34 +141,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Phuc vu static assets cua React frontend khi da build (trong Docker hoac npm run build)
 _dist_assets = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist" / "assets"
 if _dist_assets.exists():
     app.mount("/assets", StaticFiles(directory=_dist_assets), name="assets")
 
-# Danh sach encoding thu theo thu tu uu tien cao→thap (FR-12).
-# utf-8-sig: UTF-8 kem BOM (Excel Windows thuong xuat dinh dang nay).
-# cp1258: code page Viet Nam Windows, pho bien voi file CSV xuat tu
-#   phan mem ke toan/ERP noi dia.
-# windows-1252: Western European Windows / Excel CSV.
-# latin-1: fallback cuoi cung - doc duoc moi byte, nhung co the hien sai
-#   dau tieng Viet; doi voi file khong co dau, ket qua giong UTF-8.
 _CSV_ENCODINGS = ["utf-8-sig", "utf-8", "cp1258", "windows-1252", "latin-1"]
 
 
 def _read_excel(content: bytes, ext: str) -> pd.DataFrame:
-    """Doc file Excel (.xlsx/.xls), raise HTTPException(400) neu loi.
-
-    Luu y: .xls (dinh dang cu, truoc Excel 2007) can them thu vien
-    xlrd>=2.0. Hien tai chi ho tro .xlsx (openpyxl). Neu gap .xls,
-    HTTPException se bao ro de nguoi dung chuyen doi sang .xlsx.
-    """
+    """Doc file Excel (.xlsx/.xls), raise HTTPException(400) neu loi."""
     try:
         return pd.read_excel(io.BytesIO(content))
     except Exception as exc:
-        msg = (
-            f"Khong doc duoc file Excel ({exc.__class__.__name__}). "
-        )
+        msg = f"Khong doc duoc file Excel ({exc.__class__.__name__}). "
         if ext == ".xls":
             msg += (
                 "Dinh dang .xls (Excel 97-2003) chua duoc ho tro. "
@@ -189,20 +165,13 @@ def _read_excel(content: bytes, ext: str) -> pd.DataFrame:
 
 
 def _read_csv_with_fallback(content: bytes) -> pd.DataFrame:
-    """Doc CSV voi fallback qua nhieu encoding va tu phat hien dau phan cach.
-
-    Uu tien C engine mac dinh de doc file sieu nhanh. Neu gap loi phan
-    cach (vi du file dung dau cham phay ';' hoac tab), fallback qua
-    Python engine voi sep=None de tu phat hien.
-    """
-    # 1. Thu nhanh bang C engine mac dinh (sep=',')
+    """Doc CSV voi fallback qua nhieu encoding va tu phat hien dau phan cach."""
     for encoding in _CSV_ENCODINGS:
         try:
             return pd.read_csv(io.BytesIO(content), encoding=encoding)
         except Exception:
             continue
 
-    # 2. Fallback qua Python engine de tu dong do dau phan cach (; hoac tab)
     last_error: Exception | None = None
     for encoding in _CSV_ENCODINGS:
         try:
@@ -226,23 +195,7 @@ def _read_csv_with_fallback(content: bytes) -> pd.DataFrame:
 
 
 async def _read_uploaded_file(file: UploadFile) -> pd.DataFrame:
-    """Doc file CSV hoac Excel tai len, tra HTTPException(400) neu loi.
-
-    Doi ten tu _read_csv_upload (Tuan 1-2) sang _read_uploaded_file
-    (Tuan 3 bo sung) vi gio ho tro nhieu dinh dang: .csv, .xlsx, .xls.
-    Ca /profile, /interpret, /profile-many deu dung ham nay — sua 1
-    cho, ca he thong duoc loi (DRY).
-
-    Phan loai theo duoi file:
-    - .xlsx / .xls  → _read_excel()
-    - Con lai (ke ca .csv, .txt, .tsv) → _read_csv_with_fallback()
-      (khong chan cung theo duoi de tranh bi loi voi file dat ten sai
-      chinh ta nhung noi dung van la CSV hop le)
-
-    Raises:
-        HTTPException(400): file rong, khong doc duoc, hoac DataFrame
-            rong sau khi doc thanh cong.
-    """
+    """Doc file CSV hoac Excel tai len, tra HTTPException(400) neu loi."""
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="File rong hoac khong doc duoc.")
@@ -258,7 +211,6 @@ async def _read_uploaded_file(file: UploadFile) -> pd.DataFrame:
             status_code=400,
             detail="File khong co du lieu (chi co header hoac toan o trong).",
         )
-    # Áp dụng làm sạch Stage 0 cho toàn bộ pipeline
     df = data_profiler._clean(df)
     return df
 
@@ -292,7 +244,6 @@ def health() -> dict:
 @app.get("/debug-llm")
 def debug_llm() -> dict:
     """Kiểm tra API key và thử gọi LLM — dùng để debug khi /interpret bị lỗi."""
-    import os
     key = os.environ.get("GEMINI_API_KEY", "")
     result = {
         "key_loaded": bool(key),
@@ -303,11 +254,11 @@ def debug_llm() -> dict:
         from google import genai
         from google.genai import types
         client = genai.Client(api_key=key)
-        for model in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-3.6-flash"]:
+        for model in ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]:
             try:
                 resp = client.models.generate_content(
                     model=model,
-                    contents="Say OK",
+                    contents='{"status": "OK"}',
                     config=types.GenerateContentConfig(response_mime_type="application/json"),
                 )
                 result["models_tried"].append({"model": model, "status": "OK", "text": str(resp.text)[:30]})
@@ -323,12 +274,7 @@ def debug_llm() -> dict:
 @app.post("/profile", response_model=DataProfile)
 @app.post("/api/profile", response_model=DataProfile, include_in_schema=False)
 async def profile_csv(file: UploadFile = File(...)) -> DataProfile:
-    """Chay Data Profiler (O1 — Stage 1 + Stage 0 lam sach) tren file tai len.
-
-    Ho tro: .csv (UTF-8, cp1258, dau phay/cham phay), .xlsx.
-    Dung de kiem thu/demo module O1 doc lap truoc khi pipeline day du
-    (O2-O5) san sang.
-    """
+    """Chay Data Profiler (O1 — Stage 1 + Stage 0 lam sach) tren file tai len."""
     df = await _read_uploaded_file(file)
     profile = await run_in_threadpool(data_profiler.profile, df)
     avail, freq, n_per = analytics.compute_availability(df, profile)
@@ -341,17 +287,7 @@ async def profile_csv(file: UploadFile = File(...)) -> DataProfile:
 
 @app.post("/profile-many")
 async def profile_many(files: list[UploadFile] = File(...)) -> dict[str, DataProfile]:
-    """Tra ve DataProfile RIENG BIET cho tung file — KHONG join/lien ket
-    gi giua cac file.
-
-    Muc dich: cho phep nguoi dung xem truoc schema cua nhieu file truoc
-    khi chon file nao de dat cau hoi phan tich. Viec phan tich cheo
-    nhieu bang (join) nam ngoai pham vi MVP — xem docs/SRS.md muc 4
-    (Ngoai pham vi).
-
-    Raises:
-        HTTPException(400): danh sach file rong.
-    """
+    """Tra ve DataProfile RIENG BIET cho tung file."""
     if not files:
         raise HTTPException(status_code=400, detail="Can upload it nhat 1 file.")
 
@@ -393,7 +329,6 @@ async def interpret_question(
         )
     except question_interpreter.QuestionInterpretationError as exc:
         err_msg = str(exc)
-        # Phân biệt lỗi hạ tầng (503/network) vs lỗi logic (câu hỏi sai)
         if "503" in err_msg or "UNAVAILABLE" in err_msg or "LLM API" in err_msg:
             raise HTTPException(
                 status_code=503,
@@ -417,9 +352,6 @@ async def interpret_question(
     chart_check: Optional[ChartVerdict] = None
     all_prefs = _parse_chart_prefs(chart_pref, chart_prefs)
     if all_prefs:
-        # Bieu do do nguoi dung chon duoc ap dung o /analyze (cap descriptive)
-        # va o /deepen cua cap trung voi mode da chon -> phai tham dinh ca hai cap
-        # de mot lan xac nhan bao phu toan bo luot phan tich.
         check_levels: list[str] = ["descriptive"]
         if mode != "auto" and mode != "descriptive":
             check_levels.append(mode)
@@ -471,10 +403,7 @@ async def interpret_question(
 async def chart_preview(
     file: UploadFile = File(...), question: str = Form(...)
 ) -> list[ChartSpec]:
-    """Endpoint demo Tuan 5: chay O1 -> O2 -> O3 -> O4 va tra list[ChartSpec].
-
-    Giu lai sau Tuan 6 de debug tung buoc (khong can insight).
-    """
+    """Endpoint demo Tuan 5: chay O1 -> O2 -> O3 -> O4 va tra list[ChartSpec]."""
     df = await _read_uploaded_file(file)
     profile = await run_in_threadpool(data_profiler.profile, df)
     try:
@@ -507,15 +436,10 @@ async def analyze(
     chart_prefs: Optional[str] = Form(None),
     ack: Optional[str] = Form(None),
 ) -> AnalyzeResponse:
-    """Endpoint chinh cua he thong (FR-01 den FR-09) — Pipeline end-to-end.
-
-    Nhan them goal tuy chon: neu client da co goal tu /interpret thi kiem tra lai
-    va bo qua O2, giam 1 lan goi LLM va do tre.
-    """
+    """Endpoint chinh cua he thong (FR-01 den FR-09) — Pipeline end-to-end."""
     df = await _read_uploaded_file(file)
     profile = await run_in_threadpool(data_profiler.profile, df)
 
-    # Kiem tra so: khong co cot so -> cham som, tranh O2 xu ly vo nghia
     if not profile.numeric_columns:
         raise HTTPException(
             status_code=422,
@@ -524,7 +448,6 @@ async def analyze(
 
     llm = GeminiClient()
 
-    # Neu goal duoc truyen vao -> validate lai voi profile (khong tin tuong mu quang)
     if goal:
         try:
             goal_dict = json.loads(goal) if isinstance(goal, str) else goal
@@ -553,7 +476,6 @@ async def analyze(
                 status_code=422, detail=f"Không hiểu được câu hỏi: {exc}"
             ) from exc
 
-    # Kiem tra bieu do tuy chon tu nguoi dung (Chart Arbitration)
     confirmed_notes: list[str] = []
     notes_by_pref: dict[str, list[str]] = {}
     all_prefs = _parse_chart_prefs(chart_pref, chart_prefs)
@@ -589,7 +511,6 @@ async def analyze(
 
     print(f"\n🚀 [1/3] Bắt đầu phân tích: \"{question}\" | Số tác vụ: {len(analysis_goal.tasks)}", flush=True)
 
-    # O3: chay tung task, loi tung phan khong chan nhau
     task_results: list[TaskResult] = []
     for idx, task in enumerate(analysis_goal.tasks, start=1):
         print(f"⚙️ [2/3] O3: Đang sinh mã và chạy sandbox cho task {idx}/{len(analysis_goal.tasks)} ({task.type})...", flush=True)
@@ -598,7 +519,6 @@ async def analyze(
         )
         task_results.append(TaskResult(task=task, execution=exec_result))
 
-    # O4: sinh ChartSpec chinh (tat dinh, khong LLM)
     primary_charts = await run_in_threadpool(
         chart_generator.generate_charts,
         task_results,
@@ -609,7 +529,6 @@ async def analyze(
         confirmed_notes_by_pref=notes_by_pref,
     )
 
-    # Perspective Planner: sinh cac goc nhin bo sung (tat dinh, khong LLM)
     supplementary_charts: list[ChartSpec] = []
     if expand_views:
         try:
@@ -626,7 +545,6 @@ async def analyze(
         except Exception as exc:  # noqa: BLE001
             logger.warning("Loi khi sinh goc nhin bo sung: %s", exc)
 
-    # Khử trùng lặp giữa primary_charts và supplementary_charts (tránh vẽ lặp 2 lần)
     import re
     seen_titles: set[str] = set()
     primary_has_pie = any(c.chart_type == "pie" for c in primary_charts)
@@ -665,7 +583,6 @@ async def analyze(
     charts = primary_charts + filtered_supplementary
     print(f"📊 [3/3] O4: Đã tạo {len(charts)} biểu đồ. Đang viết nhận xét AI (O5)...", flush=True)
 
-    # O5: sinh insight (goi LLM), loi khong chan toan bo response
     insight_result = None
     try:
         insight_result = await run_in_threadpool(
@@ -678,7 +595,6 @@ async def analyze(
 
     print("✅ Hoàn tất toàn bộ pipeline mô tả (/analyze)", flush=True)
 
-    # Neu ca charts lan insight deu rong -> khong co gi tra ve -> 422
     if not charts and insight_result is None:
         raise HTTPException(
             status_code=422,
@@ -723,10 +639,7 @@ async def deepen_analysis(
     chart_prefs: Optional[str] = Form(None),
     ack: Optional[str] = Form(None),
 ) -> DeepenResponse:
-    """Endpoint chay phan tich sau theo tung cap: diagnostic | forecast | prescriptive.
-
-    Thuan Python tat dinh, tinh toan nhanh, LLM chi dien giai tren FactSheet.
-    """
+    """Endpoint chay phan tich sau theo tung cap: diagnostic | forecast | prescriptive."""
     df = await _read_uploaded_file(file)
     profile = await run_in_threadpool(data_profiler.profile, df)
 
@@ -755,7 +668,6 @@ async def deepen_analysis(
             warnings=[reason],
         )
 
-    # Kiem tra chart_prefs cho cap phan tich sau
     confirmed_notes: list[str] = []
     notes_by_pref: dict[str, list[str]] = {}
     all_prefs = _parse_chart_prefs(chart_pref, chart_prefs)
@@ -806,18 +718,16 @@ async def deepen_analysis(
                     c.data_shape = chart_fitness.CHART_DATA_SHAPE.get(p, "category_series")
                     if len(all_prefs) > 1:
                         c.title = f"{c.title} ({chart_fitness.CHART_DISPLAY_NAMES.get(p, p)})"
-                    
-                    # Chỉ gán ghi chú liên quan đến biểu đồ này
+
                     p_notes = notes_by_pref.get(p, [])
                     for n in p_notes:
                         if n not in c.notes:
                             c.notes.append(n)
-                    
+
                     disp = chart_fitness.CHART_DISPLAY_NAMES.get(p, p)
                     if not any(f"Biểu đồ do bạn chọn: {disp}" in n for n in c.notes):
                         c.notes.insert(0, f"Biểu đồ do bạn chọn: {disp}")
 
-                    # Bổ sung cấu trúc dữ liệu đặc thù (heatmap_matrix, box_data, ...)
                     c = chart_generator.enrich_chart_spec(c)
                     new_charts.append(c)
                 section.charts = new_charts
@@ -829,8 +739,9 @@ async def deepen_analysis(
                 warnings=section.warnings,
             )
         elif level == "forecast":
+            horizon = validated_goal.forecast_horizon or 3
             section, facts = await run_in_threadpool(
-                analytics.run_forecast, df, profile, validated_goal, 3, llm
+                analytics.run_forecast, df, profile, validated_goal, horizon, llm
             )
             if all_prefs and section.charts:
                 base_chart = section.charts[0]
@@ -842,12 +753,12 @@ async def deepen_analysis(
                     c.data_shape = chart_fitness.CHART_DATA_SHAPE.get(p, "category_series")
                     if len(all_prefs) > 1:
                         c.title = f"{c.title} ({chart_fitness.CHART_DISPLAY_NAMES.get(p, p)})"
-                    
+
                     p_notes = notes_by_pref.get(p, [])
                     for n in p_notes:
                         if n not in c.notes:
                             c.notes.append(n)
-                    
+
                     disp = chart_fitness.CHART_DISPLAY_NAMES.get(p, p)
                     if not any(f"Biểu đồ do bạn chọn: {disp}" in n for n in c.notes):
                         c.notes.insert(0, f"Biểu đồ do bạn chọn: {disp}")
@@ -888,10 +799,7 @@ async def render_chart(
     chart_type: ChartType = Form(...),
     ack: Optional[str] = Form(None),
 ) -> ChartSpec:
-    """Chuyen doi bieu do sang loai bieu do khac (tat dinh, stateless, khong LLM).
-
-    Dung khi nguoi dung chon doi bieu do khac data_shape tren the bieu do (menu ⋯).
-    """
+    """Chuyen doi bieu do sang loai bieu do khac (tat dinh, stateless, khong LLM)."""
     df = await _read_uploaded_file(file)
     profile = await run_in_threadpool(data_profiler.profile, df)
 
@@ -946,19 +854,54 @@ async def render_chart(
     return charts[0]
 
 
+def _describe_single_task(task) -> str:
+    """Mô tả ngắn gọn một AnalysisTask bằng tiếng Việt tự nhiên."""
+    metric_disp, _ = resolve_column_display(task.metric) if task.metric else ("chỉ số", None)
+    group_disp, _ = resolve_column_display(task.group_by) if task.group_by else ("", None)
+    agg_prefix = "trung bình " if getattr(task, "agg", None) == "mean" else ""
+
+    if task.type == "comparison":
+        if task.chart_hint == "pie":
+            base = f"Phân tích tỷ trọng {metric_disp.lower()}"
+        else:
+            base = f"So sánh {agg_prefix}{metric_disp.lower()}"
+        if group_disp:
+            base += f" giữa các {group_disp.lower()}"
+    elif task.type == "trend":
+        base = f"Theo dõi xu hướng {agg_prefix}{metric_disp.lower()} theo thời gian"
+        if group_disp:
+            base += f" của các {group_disp.lower()}"
+    elif task.type == "growth_rate":
+        find_mode = "giảm" if task.find == "min" else "tăng"
+        base = f"tìm {group_disp.lower() or 'nhóm'} {find_mode} mạnh nhất theo {metric_disp.lower()}"
+    else:
+        base = f"Phân tích {agg_prefix}{metric_disp.lower()}"
+
+    task_filters = getattr(task, "filters", None)
+    if isinstance(task_filters, dict) and task_filters:
+        filter_vals = ", ".join(f"{v}" for v in task_filters.values())
+        base += f" (lọc tại {filter_vals})"
+
+    return base
+
+
 def _generate_goal_summary(goal: AnalysisGoal) -> str:
-    """Tạo câu tóm tắt mục tiêu ngắn gọn, tự nhiên cho người dùng.
-    Ví dụ: 'So sánh doanh thu giữa các chi nhánh, từ 01/2026 đến 08/2026.'
-    """
+    """Tạo câu tóm tắt mục tiêu ngắn gọn, tự nhiên, phản ánh ĐẦY ĐỦ tất cả các tác vụ trong goal."""
     first_task = goal.tasks[0] if goal.tasks else None
     metric_raw = first_task.metric if first_task else None
-    group_raw = first_task.group_by if first_task else None
+    group_raw = next((t.group_by for t in goal.tasks if t.group_by), None)
     metric_disp, _ = resolve_column_display(metric_raw) if metric_raw else ("", "")
     group_disp, _ = resolve_column_display(group_raw) if group_raw else ("", "")
 
     parts: list[str] = []
     objective = getattr(goal, "objective", None)
-    if objective == "contribution_to_change":
+
+    if len(goal.tasks) > 1:
+        # Nếu câu hỏi có nhiều tác vụ (ví dụ vừa xem xu hướng vừa tìm chi nhánh giảm mạnh nhất), mô tả đầy đủ từng vế
+        task_descs = [_describe_single_task(t) for t in goal.tasks]
+        combined = " và ".join(task_descs)
+        parts.append(combined[0].upper() + combined[1:] if combined else f"Phân tích {metric_disp.lower()}")
+    elif objective == "contribution_to_change":
         action = f"Phân tích yếu tố đóng góp lớn nhất vào thay đổi {metric_disp.lower()}"
         if group_disp:
             action += f" theo {group_disp.lower()}"
@@ -976,31 +919,18 @@ def _generate_goal_summary(goal: AnalysisGoal) -> str:
         horizon = getattr(goal, "forecast_horizon", None) or 3
         action = f"Dự báo xu hướng {metric_disp.lower()} trong {horizon} kỳ tiếp theo"
         parts.append(action)
+    elif first_task:
+        desc = _describe_single_task(first_task)
+        parts.append(desc[0].upper() + desc[1:] if desc else f"Phân tích {metric_disp.lower()}")
     else:
-        task_types = [t.type for t in goal.tasks]
-        if "comparison" in task_types:
-            action = f"So sánh {metric_disp.lower()}"
-            if group_disp:
-                action += f" giữa các {group_disp.lower()}"
-            parts.append(action)
-        elif "trend" in task_types:
-            action = f"Theo dõi xu hướng {metric_disp.lower()} theo thời gian"
-            if group_disp:
-                action += f" của các {group_disp.lower()}"
-            parts.append(action)
-        elif "growth_rate" in task_types:
-            find_mode = "giảm" if (first_task and first_task.find == "min") else "tăng"
-            action = f"Tìm {group_disp.lower() or 'nhóm'} {find_mode} mạnh nhất theo {metric_disp.lower()}"
-            parts.append(action)
-        else:
-            parts.append(f"Phân tích {metric_disp.lower()}")
+        parts.append(f"Phân tích {metric_disp.lower()}")
 
     target = getattr(goal, "target", None)
-    if target:
+    if target and not any(str(target).lower() in p.lower() for p in parts):
         parts.append(f"tập trung vào {target}")
 
     if goal.time_start and goal.time_end:
-        parts.append(f"từ {goal.time_start} đến {goal.time_end}")
+        parts.append(f"dữ liệu giai đoạn {goal.time_start} đến {goal.time_end}")
     elif goal.time_start:
         parts.append(f"từ {goal.time_start}")
     elif goal.time_end:
@@ -1012,9 +942,7 @@ def _generate_goal_summary(goal: AnalysisGoal) -> str:
 @app.post("/export/xlsx")
 @app.post("/api/export/xlsx", include_in_schema=False)
 async def export_xlsx(request: ExportXlsxRequest) -> Response:
-    """Xuất kết quả phân tích sang file Excel (.xlsx) với biểu đồ gốc.
-    Nhận AnalyzeResponse + options, trả file đính kèm dưới dạng streaming bytes.
-    """
+    """Xuất kết quả phân tích sang file Excel (.xlsx) với biểu đồ gốc."""
     try:
         xlsx_bytes = await run_in_threadpool(excel_exporter.generate_excel_report, request)
     except Exception as exc:
@@ -1032,4 +960,3 @@ async def export_xlsx(request: ExportXlsxRequest) -> Response:
             "Content-Disposition": f"attachment; filename=\"{base_name}.xlsx\"; filename*=UTF-8''{quoted_name}"
         },
     )
-

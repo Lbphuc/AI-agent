@@ -1,16 +1,27 @@
 """Hop dong du lieu (I/O contract) giua cac module trong pipeline.
 
 Moi model tuong ung voi dau vao/dau ra cua mot module duoc mo ta trong
-docs/SRS.md (muc 6) va docs/ARCHITECTURE.md. Viec dinh nghia tuong minh
-cac schema nay ngay tu Tuan 1 giup cac module (O1-O5) co the duoc phat
-trien va kiem thu doc lap trong cac tuan tiep theo, dung tinh than
-"flexible / modular" ma LIDA (Dibia, 2023) de xuat.
+docs/SRS.md (muc 6) va docs/ARCHITECTURE.md.
 """
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel as _PydanticBaseModel, Field
+
+
+class BaseModel(_PydanticBaseModel):
+    """Lớp cơ sở tương thích song song cả Pydantic v1 lẫn Pydantic v2."""
+
+    def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        if hasattr(super(), "model_dump"):
+            return super().model_dump(*args, **kwargs)  # type: ignore[misc]
+        return self.dict(*args, **kwargs)
+
+    def model_copy(self, *, update: Optional[dict[str, Any]] = None, deep: bool = False) -> Any:
+        if hasattr(super(), "model_copy"):
+            return super().model_copy(update=update, deep=deep)  # type: ignore[misc]
+        return self.copy(update=update, deep=deep)
 
 
 # ---------------------------------------------------------------------------
@@ -35,19 +46,7 @@ class ColumnProfile(BaseModel):
 
 
 class DataProfile(BaseModel):
-    """Dau ra cua module Data Profiler (O1).
-
-    Stage 1 (cac truong phia tren dataset_description) hoan toan dua
-    tren luat (pandas), khong goi LLM. Trong do time_min/time_max la
-    khoang thoi gian thuc te cua time_column (neu co) — can thiet de
-    module O2 (Question Interpreter) giai nghia cac bieu thuc thoi gian
-    tuong doi (vd: "12 thang gan nhat") ma KHONG phai doc lai DataFrame
-    tho, giu dung ranh gioi module (NFR-05).
-
-    Stage 2 (dataset_description, va description/semantic_type trong
-    tung ColumnProfile) la TUY CHON, duoc dien boi ham enrich() —
-    tuong ung 2 giai doan cua SUMMARIZER trong LIDA (Dibia, 2023).
-    """
+    """Dau ra cua module Data Profiler (O1)."""
 
     row_count: int
     columns: list[ColumnProfile]
@@ -82,24 +81,10 @@ class ModeAvailability(BaseModel):
 # ---------------------------------------------------------------------------
 # O2 - Question Interpreter
 # ---------------------------------------------------------------------------
-# Tuan 1-2: type/find tung la str tu do (co tinh chua chot Literal, xem
-# README "Co tinh CHUA sua"). Tuan 3 cai dat O2 that -> chot lai dung 3
-# loai phan tich neu trong ke hoach 8 tuan (SRS muc 3, ghi chu Tuan 3):
-# xu huong (trend), so sanh (comparison), tang/giam (growth_rate).
 TaskType = Literal["trend", "comparison", "growth_rate"]
 FindMode = Literal["min", "max"]
-# 4 pham vi thoi gian "chuan hoa" ma LLM duoc phep chon - CHI chon nhan,
-# KHONG tu tinh ngay thang cu the. Viec tinh time_start/time_end that
-# (dua tren DataProfile.time_max) la logic Python tat dinh trong
-# question_interpreter._resolve_time_range(), khong giao cho LLM - dung
-# nguyen tac da ap dung cho O3 (tach LLM suy luan khoi tinh toan chinh xac).
+AggFunc = Literal["sum", "mean", "count", "min", "max"]
 TimeScope = Literal["all", "last_3_months", "last_6_months", "last_12_months", "custom"]
-# Goi y bieu do LLM (O2) co the dua ra TRUOC khi co du lieu that.
-# Chi 2 gia tri mang tinh NGU NGHIA THUAT SU (language signal):
-#   - "pie": cau hoi ngu y TY TRONG/CO CAU ("chiem bao nhieu phan tram")
-#   - "area": cau hoi nhan manh KHOI LUONG TICH LUY theo thoi gian
-# Moi quyet dinh khac (bar_horizontal, bar thay line khi it diem) deu
-# la luat TAT DINH o O4 — chi biet SAU KHI O3 chay va co du lieu that.
 ChartHint = Literal["area", "pie"]
 
 
@@ -109,29 +94,31 @@ class AnalysisTask(BaseModel):
     type: TaskType
     metric: str  # ten cot so can tinh, vi du "Doanh_thu_trieu_vnd"
     group_by: Optional[str] = None  # ten cot nhom, vi du "Chi_nhanh"
-    find: Optional[FindMode] = None  # dung cho growth_rate (chi nhanh min/max)
-    chart_hint: Optional[ChartHint] = None  # goi y bieu do ngu nghia tu LLM (O2); chi la GHI CHU tham khao, O4 co the bo qua
+    find: Optional[FindMode] = None  # dung cho growth_rate hoac comparison (min/max)
+    chart_hint: Optional[ChartHint] = None  # goi y bieu do ngu nghia tu LLM (O2)
+    agg: Optional[AggFunc] = None  # sum | mean | count | min | max
+    filters: Optional[dict[str, str]] = None  # bo loc gia tri cu the, vd {"Chi_nhanh": "TP.HCM"}
+    top_k: Optional[int] = None  # gioi han Top N nhom neu cau hoi yeu cau
 
 
 class AnalysisGoal(BaseModel):
-    """Dau ra cua module Question Interpreter (O2) dong thoi la AnalysisPlan chuan hoa.
-
-    time_scope la nhan LLM chon; time_start/time_end la ngay cu the
-    do Python tinh ra (khong phai LLM) dua tren time_scope va
-    DataProfile.time_max — xem question_interpreter._resolve_time_range.
-    """
+    """Dau ra cua module Question Interpreter (O2) dong thoi la AnalysisPlan chuan hoa."""
 
     question: str
     time_scope: TimeScope = "last_12_months"  # mac dinh theo FR-11
     time_start: Optional[str] = None
     time_end: Optional[str] = None
+    custom_start: Optional[str] = None
+    custom_end: Optional[str] = None
     tasks: list[AnalysisTask]
     levels: list[AnalysisLevel] = Field(default_factory=lambda: ["descriptive"])
 
-    # Cac truong Analysis Plan chuan hoa theo tai lieu writing-block (1).md
+    # Cac truong Analysis Plan chuan hoa
     objective: Optional[str] = None  # overview, comparison, top_growers, top_decliners, contribution_to_change, forecast, prescriptive_action
     metric: Optional[str] = None
     dimension: Optional[str] = None
+    target: Optional[str] = None  # thuc the/nhom cu the ma nguoi dung dang hoi (vd: "Đà Nẵng", "TP.HCM")
+    filters: Optional[dict[str, str]] = None
     comparison_period: Optional[str] = None
     forecast_horizon: Optional[int] = None
     analysis_methods: list[str] = Field(default_factory=list)
@@ -162,8 +149,6 @@ class ExecutionResult(BaseModel):
 # ---------------------------------------------------------------------------
 # O4 - Chart Generator & Chart Fitness / Arbitration
 # ---------------------------------------------------------------------------
-
-# Mo rong 12 loai bieu do theo ma tran muc phu hop
 ChartType = Literal[
     "kpi",
     "line",
@@ -206,8 +191,8 @@ class ChartVerdict(BaseModel):
     chart_type: ChartType
     reasons: list[Reason] = Field(default_factory=list)
     alternatives: list[ChartType] = Field(default_factory=list)
-    requires_double_confirm: bool = False  # True neu la bieu do "khong ap dung" can xac nhan 2 lan
-    confirm_step: int = 1  # 1 neu chua xac nhan buoc nao, 2 neu da xac nhan buoc 1 dang can buoc 2
+    requires_double_confirm: bool = False
+    confirm_step: int = 1
 
 
 class ChartOption(BaseModel):
@@ -216,7 +201,7 @@ class ChartOption(BaseModel):
     chart_type: ChartType
     verdict: Literal["recommended", "ok", "confirm", "blocked"]
     reasons: list[Reason] = Field(default_factory=list)
-    requires_fetch: bool = False  # khac data_shape -> can goi /render
+    requires_fetch: bool = False
 
 
 Perspective = Literal[
@@ -231,35 +216,25 @@ Perspective = Literal[
 
 
 class ChartSpec(BaseModel):
-    """Dac ta mot bieu do de frontend render (Plotly/Recharts/Chart.js).
-
-    highlight_x: ten category can to mau noi bat, vi du chi nhanh giam
-    manh nhat trong task growth_rate. Frontend Tuan 7 dung field nay de
-    render mau khac; O4 chi can dien dung ten, khong tu to mau.
-    """
+    """Dac ta mot bieu do de frontend render (Recharts)."""
 
     chart_type: ChartType
     title: str
     x: list[str] = Field(default_factory=list)
-    series: dict[str, list[Optional[float]]] = Field(default_factory=dict)  # {ten_chuoi: [gia_tri...]}
-    highlight_x: Optional[str] = None  # category can to noi bat (neu co)
-    # --- Mo rong tu De xuat Dashboard da goc nhin (deu optional -> khong pha test cu) ---
+    series: dict[str, list[Optional[float]]] = Field(default_factory=dict)
+    highlight_x: Optional[str] = None
     role: Literal["primary", "supplementary"] = "primary"
     perspective: Perspective = "primary"
-    caption: Optional[str] = None          # nhan xet ngan tat dinh
-    highlight_series: Optional[str] = None # to dam 1 DUONG trong chart nhieu chuoi
-    # --- Thong tin hien thi tieng Viet (Phan A6 de xuat) ---
+    caption: Optional[str] = None
+    highlight_series: Optional[str] = None
     display_name: Optional[str] = None
     unit: Optional[str] = None
-    # --- Mo rong cho du bao (Forecast) ---
-    band: Optional[dict[str, list[Optional[float]]]] = None  # {"lower": [...], "upper": [...]}
-    forecast_from: Optional[str] = None  # nhan x noi bat dau du bao
-    # --- Mo rong cho lua chon bieu do tuy y (Chart Arbitration) ---
+    band: Optional[dict[str, list[Optional[float]]]] = None
+    forecast_from: Optional[str] = None
     data_shape: DataShape = "category_series"
     selection: Literal["auto", "user"] = "auto"
     notes: list[str] = Field(default_factory=list)
     options: list[ChartOption] = Field(default_factory=list)
-    # --- Du lieu rieng cho hinh dang dac thu (kpi, waterfall, points, matrix, boxes, bins) ---
     kpi_value: Optional[float] = None
     kpi_delta: Optional[float] = None
     kpi_delta_pct: Optional[float] = None
@@ -272,18 +247,7 @@ class ChartSpec(BaseModel):
 
 
 class TaskResult(BaseModel):
-    """Ghep 1 AnalysisTask voi ExecutionResult tuong ung.
-
-    Dung lam input cho O4 (Chart Generator) va O5 (Insight Generator,
-    Tuan 6), vi ca 2 module deu can biet "task nay loai gi" + "ket qua
-    tinh duoc la gi" cung luc.
-
-    Ly do tach rieng thay vi dung chu ky cu (tasks, execution):
-    Orchestrator chay tung AnalysisTask rieng le (run_task()), moi task
-    co ExecutionResult doc lap. AnalysisGoal co the co nhieu task nen
-    viec ghep 1-1 (task, execution) la cach duy nhat dam bao O4 biet
-    ket qua nao thuoc ve task nao.
-    """
+    """Ghep 1 AnalysisTask voi ExecutionResult tuong ung."""
 
     task: AnalysisTask
     execution: ExecutionResult
@@ -305,13 +269,13 @@ class InsightResult(BaseModel):
 class ReportMeta(BaseModel):
     """Metadata bao cao ho tro kiem chung so lieu va in an / xuat file."""
 
-    generated_at: str            # ISO 8601
-    model_name: str              # Model AI dang dung
-    rows_total: int              # Tong so dong trong file
-    rows_used: int               # So dong thuc su duoc loc va su dung
-    goal_summary: str            # Cau tom tat "He thong hieu cau hoi cua ban la..."
-    notes: list[str] = Field(default_factory=list)  # Cac luu y tinh toan, fallback...
-    deepen: dict[str, ModeAvailability] = Field(default_factory=dict)  # Kha nang dung cac cap deepen
+    generated_at: str
+    model_name: str
+    rows_total: int
+    rows_used: int
+    goal_summary: str
+    notes: list[str] = Field(default_factory=list)
+    deepen: dict[str, ModeAvailability] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -319,7 +283,7 @@ class ReportMeta(BaseModel):
 # ---------------------------------------------------------------------------
 class AnalyzeResponse(BaseModel):
     goal: AnalysisGoal
-    task_results: list[TaskResult] = Field(default_factory=list)  # thay execution don le
+    task_results: list[TaskResult] = Field(default_factory=list)
     charts: list[ChartSpec] = Field(default_factory=list)
     insight: Optional[InsightResult] = None
     meta: Optional[ReportMeta] = None
@@ -351,15 +315,15 @@ class ExportXlsxRequest(BaseModel):
 class Fact(BaseModel):
     """Mot su that so lieu duoc tinh tat dinh, co ID de LLM trich dan."""
 
-    id: str                                  # "F1", "F2"... on dinh trong 1 lan chay
+    id: str
     kind: Literal["total", "contribution", "driver", "correlation", "forecast", "share"]
-    entity: Optional[str] = None             # ten nhom GIU NGUYEN nhu trong du lieu
-    metric: str                              # ten hien thi (Viet hoa)
+    entity: Optional[str] = None
+    metric: str
     value: float
     unit: Optional[str] = None
     period: Optional[str] = None
-    estimate: bool = False                   # True voi moi so du bao
-    text: str                                # cau mo ta tat dinh
+    estimate: bool = False
+    text: str
 
 
 class Recommendation(BaseModel):
@@ -370,7 +334,7 @@ class Recommendation(BaseModel):
     rationale: str
     fact_ids: list[str]
     priority: Literal["cao", "trung bình", "thấp"]
-    caveat: str                              # bat buoc: dieu can kiem chung
+    caveat: str
 
 
 class Notice(BaseModel):
@@ -393,8 +357,8 @@ class Section(BaseModel):
 class DeepenResponse(BaseModel):
     """Phan hoi tu POST /deepen."""
 
-    level: AnalysisLevel                         # cap duoc yeu cau
-    sections: list[Section] = Field(default_factory=list)  # prescriptive: co the tra them diagnostic, forecast lam can cu
+    level: AnalysisLevel
+    sections: list[Section] = Field(default_factory=list)
     recommendations: list[Recommendation] = Field(default_factory=list)
     facts: list[Fact] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
@@ -404,7 +368,10 @@ class InterpretResponse(BaseModel):
     """Phan hoi tu POST /interpret (O1 + O2 + resolve_levels)."""
 
     goal: AnalysisGoal
-    levels: list[AnalysisLevel]        # SAU khi hop nhat mode + goal.levels + kha dung
+    levels: list[AnalysisLevel]
     notices: list[Notice] = Field(default_factory=list)
-    goal_summary: str                  # cau "He thong hieu cau hoi cua ban la..."
-    chart_check: Optional[ChartVerdict] = None  # ket qua tham dinh bieu do tuy y (neu co chart_pref)
+    goal_summary: str
+    chart_check: Optional[ChartVerdict] = None
+
+
+DataProfile.update_forward_refs()

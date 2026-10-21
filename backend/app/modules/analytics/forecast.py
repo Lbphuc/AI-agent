@@ -1,13 +1,7 @@
 """Module analytics/forecast.py.
 
 Cap 2 — Du bao (Forecast Analytics).
-Thuan numpy tat dinh, khong goi LLM de tinh toan:
-1. Guard nghiem ngat: tu choi neu < 15 ky hoac thieu > 20%.
-2. 5 mo hinh ung vien: naive, seasonal_naive, linear, holt, seasonal_decomp.
-3. Rolling-origin backtest (h=3) chon mo hinh MAPE thap nhat va tinh dai bat dinh 80%.
-4. Dai bat dinh conformal tu phan vi sai so backtest thuc te.
-5. Danh gia do tin cay: cao (MAPE < 5%), trung binh (< 12%), thap.
-6. Sinh FactSheet du bao (estimate=True) va ChartSpec voi series, band, forecast_from.
+Thuan numpy tat dinh, khong goi LLM de tinh toan.
 """
 from __future__ import annotations
 
@@ -19,14 +13,11 @@ import pandas as pd
 from ...llm_client import LLMClient
 from ...schemas import AnalysisGoal, ChartSpec, DataProfile, Fact, InsightResult, Section
 from ..business_terms import resolve_column_display
+from ..chart_generator import enrich_chart_spec
 from .series import infer_frequency, prepare_regular_series, aggregation_policy
 
 logger = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Cac mo hinh ung vien (~15 dong moi cai, chi dung numpy)
-# ---------------------------------------------------------------------------
 
 def _model_naive(y_train: np.ndarray, h: int, m: int = 1) -> np.ndarray:
     """Naive: lay gia tri quan sat cuoi cung."""
@@ -83,7 +74,6 @@ def _model_seasonal_decomp(y_train: np.ndarray, h: int, m: int = 12) -> np.ndarr
     if n < 2 * m:
         return _model_holt(y_train, h, m)
 
-    # Tinh chi so mua vu trung binh cho tung thang/ky trong chu ky
     n_full_cycles = n // m
     usable_y = y_train[: n_full_cycles * m]
     cycle_reshaped = usable_y.reshape(n_full_cycles, m)
@@ -91,21 +81,17 @@ def _model_seasonal_decomp(y_train: np.ndarray, h: int, m: int = 12) -> np.ndarr
     cycle_means = np.where(cycle_means <= 1e-6, 1.0, cycle_means)
 
     seasonal_indices = (cycle_reshaped / cycle_means).mean(axis=0)
-    # Chuan hoa de trung binh chi so mua = 1.0
     seasonal_indices = seasonal_indices / seasonal_indices.mean()
 
-    # Bo mua vu tren toan bo y_train
     rep_indices = np.tile(seasonal_indices, int(np.ceil(n / m)))[:n]
     deseas_y = y_train / np.where(rep_indices <= 1e-4, 1.0, rep_indices)
 
-    # Fit xu huong tuyen tinh tren chuoi da bo mua
     t = np.arange(n, dtype=float)
     slope, intercept = np.polyfit(t, deseas_y, 1)
 
     future_t = np.arange(n, n + h, dtype=float)
     trend_preds = intercept + slope * future_t
 
-    # Nhan lai chi so mua tuong ung voi cac buoc tuong lai
     future_season_idx = [(n + step) % m for step in range(h)]
     future_seasonal = seasonal_indices[future_season_idx]
 
@@ -122,10 +108,6 @@ MODEL_REGISTRY: dict[str, tuple[Callable, str, bool]] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Rolling-Origin Backtest
-# ---------------------------------------------------------------------------
-
 def run_backtest(
     y: np.ndarray,
     model_fn: Callable,
@@ -141,7 +123,6 @@ def run_backtest(
     errors_by_step: list[list[float]] = [[] for _ in range(h)]
     mape_list = []
 
-    # Cat moc goc tu min_train den n-h
     for origin in range(min_train, n - h + 1):
         y_train = y[:origin]
         y_test = y[origin : origin + h]
@@ -167,10 +148,6 @@ def run_backtest(
     return avg_mape, errors_by_step
 
 
-# ---------------------------------------------------------------------------
-# Diem vao chinh: run_forecast
-# ---------------------------------------------------------------------------
-
 def run_forecast(
     df: pd.DataFrame,
     profile: DataProfile,
@@ -183,6 +160,9 @@ def run_forecast(
     charts: list[ChartSpec] = []
     warnings: list[str] = []
 
+    if goal.forecast_horizon and goal.forecast_horizon > 0:
+        h = goal.forecast_horizon
+
     primary_task = goal.tasks[0] if goal.tasks else None
     metric = primary_task.metric if primary_task else profile.numeric_columns[0]
     time_col = profile.time_column or ""
@@ -191,28 +171,30 @@ def run_forecast(
     metric_disp, metric_unit = resolve_column_display(metric)
     unit_str = f" {metric_unit}" if metric_unit else ""
 
-    # Kiem tra neu cau hoi hoi rieng ve mot nhom cu the (vi du "Đà Nẵng", "Miền Bắc")
-    target_entity: Optional[str] = None
+    target_entity: Optional[str] = getattr(goal, "target", None)
     q_lower = goal.question.lower()
-    if group_col and group_col in df.columns:
+    if not target_entity and group_col and group_col in df.columns:
         for ent in df[group_col].dropna().unique():
             if str(ent).lower() in q_lower:
                 target_entity = str(ent)
                 break
 
     forecast_source_df = df
-    if target_entity is not None and group_col:
+    if target_entity is not None and group_col and group_col in df.columns:
         filtered_sub = df[df[group_col] == target_entity].copy()
         if len(filtered_sub) >= 15:
             forecast_source_df = filtered_sub
 
-    # 1. Kiem tra Guard
     _, cycle_len = infer_frequency(forecast_source_df, time_col)
     series_df, prep_warns = prepare_regular_series(forecast_source_df, time_col, metric, group_col=None)
-    warnings.extend(prep_warns)
+    # Chỉ đưa cảnh báo thiếu dữ liệu thực sự vào warnings, còn chính sách tổng hợp (sum/mean) đưa vào notes của biểu đồ
+    info_notes: list[str] = []
+    for w in prep_warns:
+        if "chính sách" in w.lower():
+            info_notes.append(w)
+        else:
+            warnings.append(w)
 
-    # Tối ưu chuỗi thời gian: nếu chuỗi dạng ngày nhưng kéo dài nhiều tháng (> 90 ngày và > 45 điểm),
-    # tự động gom nhóm theo Tháng (Monthly Resampling) để dự báo mang ý nghĩa chu kỳ tháng/quý
     is_monthly = False
     if len(series_df) > 45 and pd.api.types.is_datetime64_any_dtype(series_df.index):
         span_days = (series_df.index.max() - series_df.index.min()).days
@@ -233,7 +215,6 @@ def run_forecast(
     y_total = series_df[metric].to_numpy(dtype=float)
     x_total_dates = [pd.Timestamp(t).strftime("%Y-%m") for t in series_df.index]
 
-    # 2. Chon mo hinh tot nhat qua Backtest
     min_train = max(8, n_points - 10)
     has_seasonality_data = (n_points >= 2 * cycle_len) and (cycle_len > 1)
 
@@ -257,11 +238,9 @@ def run_forecast(
             best_model_display = disp_name
             best_errors_by_step = err_steps
 
-    # Du bao tren toan bo chuoi
     best_fn = MODEL_REGISTRY[best_model_name][0]
     forecast_vals = best_fn(y_total, h, cycle_len)
 
-    # 3. Dai bat dinh 80% conformal tu sai so backtest
     q80_bands = []
     for step in range(h):
         step_errs = best_errors_by_step[step] if step < len(best_errors_by_step) else []
@@ -271,7 +250,6 @@ def run_forecast(
             q80 = float(forecast_vals[step] * 0.10)
         q80_bands.append(q80)
 
-    # Xac dinh do tin cay
     n_trials = len(best_errors_by_step[0]) if best_errors_by_step else 0
     beats_baseline = (best_mape <= baseline_mape) or (baseline_mape >= 999.0)
 
@@ -284,7 +262,6 @@ def run_forecast(
         if not beats_baseline:
             warnings.append("Mô hình không vượt được đường cơ sở naive; độ tin cậy được hạ xuống mức thấp.")
 
-    # Sinh nhan thoi gian tuong lai
     last_dt = pd.Timestamp(series_df.index[-1])
     future_dates = []
     for step in range(1, h + 1):
@@ -299,15 +276,12 @@ def run_forecast(
 
     forecast_start_date = future_dates[0]
 
-    # 4. Tao ChartSpec voi ComposedChart data (Lich su + Du bao + Dai bat dinh)
     x_all = x_total_dates + future_dates
-    y_hist_with_nulls: list[Optional[float]] = [float(v) for v in y_total] + [None] * h
+    y_hist_with_nulls: list[Optional[float]] = [round(float(v), 1) for v in y_total] + [None] * h
+    y_fc_with_nulls: list[Optional[float]] = [None] * (len(y_total) - 1) + [round(float(y_total[-1]), 1)] + [round(float(v), 1) for v in forecast_vals]
 
-    # Du bao noi tiep tu diem cuoi cung cua lich su
-    y_fc_with_nulls: list[Optional[float]] = [None] * (len(y_total) - 1) + [float(y_total[-1])] + [round(float(v), 1) for v in forecast_vals]
-
-    lower_with_nulls: list[Optional[float]] = [None] * (len(y_total) - 1) + [float(y_total[-1])]
-    upper_with_nulls: list[Optional[float]] = [None] * (len(y_total) - 1) + [float(y_total[-1])]
+    lower_with_nulls: list[Optional[float]] = [None] * (len(y_total) - 1) + [round(float(y_total[-1]), 1)]
+    upper_with_nulls: list[Optional[float]] = [None] * (len(y_total) - 1) + [round(float(y_total[-1]), 1)]
 
     for step in range(h):
         fc_v = float(forecast_vals[step])
@@ -317,7 +291,7 @@ def run_forecast(
         lower_with_nulls.append(round(low_v, 1))
         upper_with_nulls.append(round(up_v, 1))
 
-    period_unit_name = "tháng" if is_monthly else ("ngày" if cycle_len == 7 else "kỳ")
+    period_unit_name = "tháng" if (is_monthly or cycle_len == 12) else ("ngày" if cycle_len == 7 else "kỳ")
     caption = (
         f"Mô hình: {best_model_display} (MAPE backtest: {best_mape:.1f}%, độ tin cậy: {confidence_level.title()}). "
         f"Dải bất định 80% phản ánh sai số kiểm định thực tế."
@@ -326,35 +300,33 @@ def run_forecast(
     forecast_notes = [
         f"Lịch sử huấn luyện: từ {x_total_dates[0]} đến {x_total_dates[-1]} ({len(x_total_dates)} {period_unit_name}).",
         f"Kỳ dự báo tiếp nối: từ {future_dates[0]} đến {future_dates[-1]} ({h} {period_unit_name}).",
-        "Mô hình sử dụng toàn bộ chuỗi lịch sử sẵn có để huấn luyện các mẫu chu kỳ/xu hướng, sau đó dự báo tiếp nối các kỳ tương lai.",
+        *info_notes,
     ]
     if not beats_baseline:
         forecast_notes.append("Lưu ý: Mô hình có độ tin cậy thấp do không vượt qua baseline; giá trị dự báo chỉ mang tính tham khảo.")
 
     chart_title = f"Dự báo xu hướng {metric_disp}{f' — {target_entity}' if target_entity else ''} ({h} {period_unit_name} tới)"
-    charts.append(
-        ChartSpec(
-            chart_type="line",
-            title=chart_title,
-            x=x_all,
-            series={
-                "Thực tế": y_hist_with_nulls,
-                "Dự báo": y_fc_with_nulls,
-            },
-            band={
-                "lower": lower_with_nulls,
-                "upper": upper_with_nulls,
-            },
-            forecast_from=forecast_start_date,
-            caption=caption,
-            display_name=metric_disp,
-            unit=metric_unit,
-            role="primary",
-            notes=forecast_notes,
-        )
+    fc_chart = ChartSpec(
+        chart_type="line",
+        title=chart_title,
+        x=x_all,
+        series={
+            "Thực tế": y_hist_with_nulls,
+            "Dự báo": y_fc_with_nulls,
+        },
+        band={
+            "lower": lower_with_nulls,
+            "upper": upper_with_nulls,
+        },
+        forecast_from=forecast_start_date,
+        caption=caption,
+        display_name=metric_disp,
+        unit=metric_unit,
+        role="primary",
+        notes=forecast_notes,
     )
+    charts.append(enrich_chart_spec(fc_chart))
 
-    # 5. Sinh Facts du bao
     facts.append(
         Fact(
             id="F_FC_MODEL",
@@ -393,7 +365,6 @@ def run_forecast(
             )
         )
 
-    # 6. Dien giai LLM tren FactSheet du bao
     narrative_text = _generate_forecast_narrative(facts, confidence_level, llm)
     narrative = InsightResult(
         insight_text=narrative_text,
@@ -414,7 +385,7 @@ def _generate_forecast_narrative(facts: list[Fact], confidence: str, llm: Option
         + "\n".join(f"[{f.id}] {f.text}" for f in facts)
         + f"\n\nĐộ tin cậy mô hình: {confidence.upper()}.\n"
         "Yêu cầu:\n"
-        "- Viết nhận xét dự báo ngắn gọn (3–4 câu).\n"
+        "- Viết nhận xét dự báo ngắn gọn (3–4 câu) bằng văn bản thuần túy (KHÔNG dùng ký tự in đậm ** hay markdown).\n"
         "- Mọi số liệu dự báo BẮT BUỘC kèm chữ 'ước tính' hoặc 'dự kiến'.\n"
         "- Nêu rõ mức tin cậy và sai số MAPE.\n"
         "- KHÔNG dùng từ chắc chắn tuyệt đối ('chắc chắn sẽ', 'nhất định'); dùng 'có xu hướng', 'dự kiến dao động trong khoảng'.\n"
@@ -424,6 +395,8 @@ def _generate_forecast_narrative(facts: list[Fact], confidence: str, llm: Option
 
     try:
         text = llm.complete_text(prompt).strip()
+        # Loại bỏ các dấu ** thừa nếu LLM vẫn sinh markdown
+        text = text.replace("**", "")
         return text if text else fallback_text
     except Exception as exc:
         logger.warning("Loi khi sinh dien giai du bao bang LLM: %s", exc)

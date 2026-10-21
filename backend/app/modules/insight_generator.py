@@ -3,22 +3,6 @@
 Nhan cau hoi goc + so lieu DA TINH SAN (TaskResult, tu O3b), viet
 nhan xet (insight) bang ngon ngu tu nhien tieng Viet, tra loi truc
 tiep cau hoi nguoi dung.
-
-BAT BUOC goi API LLM — day thuan la bai toan sinh ngon ngu tu nhien
-(NLG), khong the viet bang luat co dinh.
-
-NGUYEN TAC QUAN TRONG (giam hallucination so lieu): chi dua SO LIEU
-DA TINH (ket qua tu TaskResult) vao prompt, KHONG dua DataFrame tho
-— LLM chi duoc dien giai so lieu co san, khong duoc tu suy luan hoac
-tinh toan so moi.
-
-Tu danh gia chat luong (confidence_score): su dung ky thuat doi chieu
-so (numeric accuracy) — tat dinh, khong goi LLM, gia nhu mien phi.
-Chi la heuristic tham khao (muc 2 trong ke hoach Tuan 6), khong phai
-cong chan cung. Script do chat luong offline o Tuan 6 (SEVQ) la tang
-thu hai day du hon.
-
-Tuan 6: thay stub bang cai dat that.
 """
 from __future__ import annotations
 
@@ -31,27 +15,12 @@ from ..schemas import AnalysisGoal, InsightResult, TaskResult
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Loi tuy chinh
-# ---------------------------------------------------------------------------
-
 class InsightGenerationError(Exception):
-    """Raise khi KHONG CON task nao thanh cong de viet nhan xet.
+    """Raise khi KHONG CON task nao thanh cong de viet nhan xet."""
 
-    Khac voi 1 phan that bai (chi log warning, van xu ly phan con lai).
-    Chi raise khi tat ca task deu loi — khi do khong co du lieu de viet gi.
-    """
-
-
-# ---------------------------------------------------------------------------
-# Helper: format 1 TaskResult thanh van ban de doc cho LLM
-# ---------------------------------------------------------------------------
 
 def _format_task_result(tr: TaskResult) -> str:
-    """Dinh dang ket qua 1 task thanh doan van ban cho LLM doc.
-
-    Chi dua so da tinh vao — khong co gi tu DataFrame tho.
-    """
+    """Dinh dang ket qua 1 task thanh doan van ban cho LLM doc."""
     task, execution = tr.task, tr.execution
     header = f"[{task.type}] {task.metric}"
     if task.group_by:
@@ -75,10 +44,6 @@ def _format_task_result(tr: TaskResult) -> str:
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# Helper: xay prompt
-# ---------------------------------------------------------------------------
-
 def _build_prompt(question: str, task_results: list[TaskResult], goal: AnalysisGoal | None = None) -> str:
     """Xay prompt gui LLM — chi chua so lieu da tinh, khong chua DataFrame."""
     data_blocks = "\n\n".join(_format_task_result(tr) for tr in task_results)
@@ -96,8 +61,7 @@ def _build_prompt(question: str, task_results: list[TaskResult], goal: AnalysisG
         goal_guidance = (
             "\nLƯU Ý VỀ MỤC TIÊU CÂU HỎI:\n"
             "- Người dùng đang tìm nhóm tăng trưởng hoặc sụt giảm mạnh nhất. "
-            "Nếu số liệu ở đây là so sánh quy mô, hãy nêu rõ đây là bối cảnh tổng quan, "
-            "còn tỷ lệ tăng trưởng và mức thay đổi sẽ được phân tích ở phần Chẩn đoán.\n"
+            "Hãy trả lời trực tiếp nhóm nào tăng/giảm mạnh nhất kèm đúng con số trong dữ liệu.\n"
         )
 
     return (
@@ -112,50 +76,60 @@ def _build_prompt(question: str, task_results: list[TaskResult], goal: AnalysisG
         "QUY TAC VIET NHAN XET:\n"
         "1. Viet mot doan nhan xet ngan gon (2-4 cau), bang tieng Viet tu nhien.\n"
         "2. Neu cau hoi hoi ve tuong lai / du bao / nguyen nhan / de xuat / dong gop: Hay tap trung tom tat\n"
-        "   quy mo tong the va cac moc bien dong trong du lieu da tinh tren de lam co so nen tang.\n"
+        "   quy mo tong the va cac moc bien dong chinh (thang cao nhat, thang thap nhat) trong du lieu da tinh tren de lam co so nen tang.\n"
         "   TUYET DOI KHONG tu choi tra loi hoac tuyen bo rang 'he thong khong the du bao' (vi phan\n"
         "   chuyen sau se duoc cac module chuyen biet hien thi rieng ben duoi).\n"
         "3. Giu nguyen chinh xac ten nhom/nhan nhu trong so lieu, khong them dau hay doi cach viet so voi du lieu goc.\n"
-        "4. Neu co nhieu phan so lieu, hay ket hop chung mot cach mach lac. Chi tra ve doan van, khong them tieu de\n"
-        "   hay markdown."
+        "4. Chi trich dan dung cac con so co trong bang so lieu tren, khong tu uoc luong so tron (nhu 'duoi 100').\n"
+        "5. Chi tra ve doan van, khong them tieu de hay markdown."
     )
 
 
-# ---------------------------------------------------------------------------
-# Helper: doi chieu so lieu — heuristic tat dinh, khong goi LLM
-# ---------------------------------------------------------------------------
-
-_NUMBER_PATTERN = re.compile(r"-?\d+(?:[.,]\d+)?")
+_NUMBER_PATTERN = re.compile(r"-?\d+(?:[.,]\d+)*")
 
 
 def _extract_numbers(text: str) -> list[float]:
-    """Trich so tu text, ho tro ca dau '.' va ',' lam phan thap phan."""
+    """Trich so tu text, ho tro ca dau '.' va ',' lam phan thap phan hoac ngan phan."""
     numbers: list[float] = []
     for raw in _NUMBER_PATTERN.findall(text):
         try:
-            numbers.append(float(raw.replace(",", ".")))
+            clean = raw
+            if "." in clean and "," in clean:
+                clean = clean.replace(".", "").replace(",", ".")
+            elif "," in clean:
+                clean = clean.replace(",", ".")
+            numbers.append(float(clean))
         except ValueError:
             continue
     return numbers
 
 
 def _collect_known_values(task_results: list[TaskResult]) -> set[float]:
-    """Tap hop toan bo gia tri so that trong ket qua tinh toan.
-
-    Day la 'nguon su that' de doi chieu voi so LLM viet trong insight.
-    Chi lay gia tri trong dict du lieu (task.type key), bo qua cac
-    field phu (target, ...) de tranh dem trung.
-    """
+    """Tap hop toan bo gia tri so that trong ket qua tinh toan."""
     known: set[float] = set()
     for tr in task_results:
         for key, value in tr.execution.results.items():
             if isinstance(value, dict):
+                numeric_vals = []
                 for v in value.values():
                     if isinstance(v, (int, float)):
-                        known.add(float(v))
+                        fv = float(v)
+                        known.add(fv)
+                        numeric_vals.append(fv)
+                if numeric_vals:
+                    known.add(round(sum(numeric_vals), 2))
+                    known.add(round(sum(numeric_vals) / len(numeric_vals), 2))
             elif isinstance(value, (int, float)):
                 known.add(float(value))
     return known
+
+
+_DATE_TOKEN_PATTERN = re.compile(
+    r"(?:năm\s+20\d{2}|tháng\s+\d{1,2}(?:\s*/\s*20\d{2})?|quý\s+[1-4](?:\s*/\s*20\d{2})?|"
+    r"\b20\d{2}[-/]\d{1,2}(?:[-/]\d{1,2})?\b|\b\d{1,2}/\d{1,2}/20\d{2}\b|"
+    r"\b\d{1,2}\s+(?:tháng|kỳ|quý|năm|nhóm|chi nhánh|danh mục)\b)",
+    re.IGNORECASE,
+)
 
 
 def _numeric_accuracy_score(
@@ -164,35 +138,25 @@ def _numeric_accuracy_score(
     tolerance: float = 0.5,
 ) -> float:
     """Tinh ti le so trong insight khop voi so lieu that (heuristic).
-
-    Doi chieu theo gia tri tuyet doi: LLM thuong viet "giam 35.56%" ma
-    khong co dau tru, trong khi du lieu that la -35.56. Viec dung abs()
-    phan anh dung y dinh: LLM co nhac den con so dung, chi khac ve ky hieu.
-
-    Ghi chu gioi han (quan trong de bao cao):
-    - "Tang gap doi" (khong co so) khong bi doi chieu.
-    - So "12" (thang) co the trung hop voi gia tri nao do.
-    - Nen coi day la TIN HIEU THAM KHAO re tien, khong phai cong chan cung.
-
-    Returns:
-        float trong [0.0, 1.0]: 1.0 neu khong co gi de doi chieu (edge case).
+    Bo qua cac con so chi ngay thang / nam / so ky (vd: 'nam 2017', 'thang 12', '2025-09')
+    de tranh canh bao gia.
     """
     known = _collect_known_values(task_results)
-    mentioned = _extract_numbers(insight_text)
+    cleaned_text = _DATE_TOKEN_PATTERN.sub(" ", insight_text)
+    mentioned = _extract_numbers(cleaned_text)
     if not known or not mentioned:
-        return 1.0  # khong co gi de doi chieu -> khong co gi de sai
-    # So sanh abs() de xu ly "giam 35.56" (am trong data, duong trong text)
+        return 1.0
     known_abs = {abs(k) for k in known}
     matched = sum(
-        1 for m in mentioned if any(abs(abs(m) - ka) <= tolerance for ka in known_abs)
+        1
+        for m in mentioned
+        if any(
+            abs(abs(m) - ka) <= max(tolerance, ka * 0.01)
+            for ka in known_abs
+        )
     )
     return round(matched / len(mentioned), 2)
 
-
-
-# ---------------------------------------------------------------------------
-# Ham chinh — API cong khai cua module O5
-# ---------------------------------------------------------------------------
 
 def generate_insight(
     question: str,
@@ -200,24 +164,7 @@ def generate_insight(
     llm: LLMClient,
     goal: AnalysisGoal | None = None,
 ) -> InsightResult:
-    """Sinh nhan xet ngon ngu tu nhien tu so lieu da tinh.
-
-    Chi xu ly cac task thanh cong (execution.success=True). 1 task loi
-    khong chan insight cua cac task con lai — giong nguyen tac da ap dung
-    o O4 (Chart Generator, Tuan 5).
-
-    Args:
-        question: cau hoi goc cua nguoi dung (nguyen van).
-        task_results: ket qua tung task tu orchestrator.
-        llm: LLMClient thuc (GeminiClient/ClaudeClient) hoac gia lap (test).
-        goal: AnalysisGoal neu co — giup dinh huong nhan xet khong lech muc tieu.
-
-    Returns:
-        InsightResult voi insight_text va confidence_score heuristic.
-
-    Raises:
-        InsightGenerationError: neu KHONG CO task nao thanh cong.
-    """
+    """Sinh nhan xet ngon ngu tu nhien tu so lieu da tinh."""
     successful = [tr for tr in task_results if tr.execution.success]
 
     if not successful:

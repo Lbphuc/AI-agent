@@ -2,23 +2,9 @@
 
 Sinh mã pandas cho DUY NHẤT MỘT AnalysisTask theo kỹ thuật "fill-in-the-middle":
 LLM chỉ điền phần thân hàm analyze(df), khung scaffold cố định theo task.type.
-
-Thiết kế tuân thủ 3 nguyên tắc xuyên suốt đồ án:
-1. Sinh mã theo từng task — không gộp nhiều task vào 1 lần gọi LLM.
-   Mỗi đoạn mã nhỏ hơn, dễ validate; nếu 1 task lỗi không kéo theo các task khác.
-2. Scaffold riêng biệt cho từng task.type — LLM không cần biết về các loại task khác,
-   prompt ngắn hơn, ít cơ hội "thoát khỏi scaffold".
-3. KHÔNG để LLM lọc thời gian — time_start/time_end đã được O2 tính tất định;
-   việc lọc df theo thời gian thuộc trách nhiệm orchestrator (analysis_runner.py),
-   TRƯỚC khi df được đưa vào sandbox. Đây là nguyên tắc "tách suy luận LLM khỏi
-   tính toán chính xác" được áp dụng xuyên suốt từ O2.
-
-Tham chiếu: VISGENERATOR trong LIDA (Dibia, 2023) — kỹ thuật fill-in-the-middle
-để giới hạn phạm vi LLM sinh mã, từ đó giảm bề mặt rủi ro cho sandbox.
 """
 from __future__ import annotations
 
-import json
 import logging
 import re
 
@@ -27,8 +13,6 @@ from ..schemas import AnalysisTask, CodeGenResult, DataProfile
 
 logger = logging.getLogger(__name__)
 
-
-# Scaffold cố định — 3 loại, tương ứng 3 TaskType trong schemas.py
 
 _SCAFFOLDS: dict[str, str] = {
     "trend": """\
@@ -49,7 +33,7 @@ def analyze(df):
 """,
     "growth_rate": """\
 def analyze(df):
-    \"\"\"Tính % tăng/giảm của metric theo nhóm.
+    \"\"\"Tính % tăng/giảm của metric theo nhóm giữa kỳ đầu và kỳ cuối.
     Trả về: dict với 2 key:
       - "growth_rate": pd.Series (index = tên nhóm, values = % thay đổi, làm tròn 2 chữ số).
       - "target": str — tên nhóm tăng/giảm nhiều nhất theo find (min/max).
@@ -59,21 +43,16 @@ def analyze(df):
 """,
 }
 
-# Tên output key mỗi loại task cần trả về — dùng để set expected_outputs trong CodeGenResult
 _EXPECTED_OUTPUTS: dict[str, list[str]] = {
     "trend": ["trend"],
     "comparison": ["comparison"],
     "growth_rate": ["growth_rate", "target"],
 }
 
-# ---------------------------------------------------------------------------
-# Few-shot examples — 1 ví dụ/loại, đặt trong prompt ĐÚNG loại đó
-# (không chứa cả 3 loại trong 1 prompt — không cần thiết vì task đã phân loại)
-# ---------------------------------------------------------------------------
 _FEW_SHOTS: dict[str, str] = {
     "trend": """\
-Ví dụ (trend — doanh thu theo từng tháng):
-Metric: "Doanh_thu_trieu_vnd", Cột thời gian: "Thang"
+Ví dụ (trend — doanh thu theo từng kỳ thời gian):
+Metric: "Doanh_thu_trieu_vnd", Cột thời gian: "Thang", Hàm tổng hợp: "sum"
 ```python
 def analyze(df):
     trend = df.groupby("Thang")["Doanh_thu_trieu_vnd"].sum()
@@ -82,7 +61,7 @@ def analyze(df):
 
     "comparison": """\
 Ví dụ (comparison — so sánh tổng doanh thu giữa các chi nhánh):
-Metric: "Doanh_thu_trieu_vnd", Nhóm: "Chi_nhanh"
+Metric: "Doanh_thu_trieu_vnd", Nhóm: "Chi_nhanh", Hàm tổng hợp: "sum"
 ```python
 def analyze(df):
     comparison = df.groupby("Chi_nhanh")["Doanh_thu_trieu_vnd"].sum().sort_values(ascending=False)
@@ -94,11 +73,13 @@ Ví dụ (growth_rate — chi nhánh giảm doanh thu nhiều nhất, find="min"
 Metric: "Doanh_thu_trieu_vnd", Nhóm: "Chi_nhanh", Cột thời gian: "Thang", find: "min"
 ```python
 def analyze(df):
-    # Sắp xếp theo thời gian để lấy đúng tháng đầu và tháng cuối
-    df_sorted = df.sort_values("Thang")
-    first = df_sorted.groupby("Chi_nhanh")["Doanh_thu_trieu_vnd"].first()
-    last = df_sorted.groupby("Chi_nhanh")["Doanh_thu_trieu_vnd"].last()
-    growth = ((last - first) / first * 100).round(2)
+    # Chuẩn hóa thời gian theo tháng và cộng gộp theo (kỳ, nhóm) trước khi lấy kỳ đầu/cuối
+    dt = pd.to_datetime(df["Thang"], errors="coerce")
+    period = dt.dt.to_period("M").astype(str) if not dt.isna().all() else df["Thang"].astype(str)
+    grouped = df.assign(_p=period).groupby(["_p", "Chi_nhanh"])["Doanh_thu_trieu_vnd"].sum().unstack()
+    first = grouped.iloc[0]
+    last = grouped.iloc[-1]
+    growth = ((last - first) / first * 100).round(2).dropna()
     target = growth.idxmin()  # find="min" -> giảm mạnh nhất
     return {"growth_rate": growth, "target": target}
 ```""",
@@ -109,15 +90,9 @@ def _build_prompt(
     task: AnalysisTask,
     profile: DataProfile,
     previous_error: str | None,
+    question: str = "",
 ) -> str:
-    """Xây prompt fill-in-the-middle cho đúng task.type.
-
-    Prompt bao gồm:
-    - Thông tin cột thật (grounded) từ DataProfile — LLM chỉ dùng tên cột này
-    - Few-shot ví dụ ĐÚNG loại task (không lẫn lộn 3 loại)
-    - Scaffold cố định cần điền
-    - Thông báo lỗi lần trước (nếu có) — kỹ thuật error feedback của LIDA
-    """
+    """Xây prompt fill-in-the-middle cho đúng task.type, kèm ngữ cảnh câu hỏi gốc."""
     scaffold = _SCAFFOLDS[task.type]
     few_shot = _FEW_SHOTS[task.type]
 
@@ -134,6 +109,10 @@ def _build_prompt(
         if task.find
         else "(không cần tìm min/max)"
     )
+    agg_info = getattr(task, "agg", None) or "sum"
+    top_k = getattr(task, "top_k", None)
+    top_k_info = f"Lấy top {top_k} nhóm đầu tiên (.head({top_k}))" if top_k else "(lấy tất cả nhóm)"
+    question_line = f'- Câu hỏi gốc của người dùng: "{question}"\n' if question else ""
 
     error_section = ""
     if previous_error:
@@ -147,13 +126,16 @@ THÔNG BÁO LỖI LẦN TRƯỚC (bắt buộc phải sửa):
     return f"""Bạn là lập trình viên Python chuyên pandas. Nhiệm vụ: điền phần thân hàm analyze(df).
 BẮT BUỘC: CHỈ dùng đúng tên cột liệt kê dưới, KHÔNG import thư viện, KHÔNG tự thêm lọc thời gian.
 
-Thông tin dataset:
-- Cột metric cần tính: "{task.metric}" (kiểu số)
+Thông tin dataset & yêu cầu:
+{question_line}- Cột metric cần tính: "{task.metric}" (kiểu số)
 - Cột thời gian: {time_col_info}
 - Cột nhóm (group_by): {group_col_info}
 - Loại phân tích: "{task.type}"
+- Hàm tổng hợp (agg): "{agg_info}" (dùng .{agg_info}() khi groupby)
 - Hướng tìm kiếm: {find_info}
-- df đã được LỌC theo khoảng thời gian bởi orchestrator — KHÔNG cần lọc thêm.
+- Giới hạn kết quả: {top_k_info}
+- Lưu ý: Với task "growth_rate", BẮT BUỘC phải chuyển cột thời gian sang kỳ tháng bằng pd.to_datetime(...).dt.to_period("M") và cộng gộp theo (kỳ, nhóm) trước khi lấy dòng đầu (.iloc[0]) và dòng cuối (.iloc[-1]).
+- df đã được LỌC theo khoảng thời gian và điều kiện thực thể bởi orchestrator — KHÔNG cần lọc thêm.
 {error_section}
 {few_shot}
 
@@ -163,20 +145,13 @@ Bây giờ hãy điền vào scaffold sau. CHỈ trả về code Python hoàn ch
 
 
 def _extract_code(raw: str | dict) -> str:
-    """Trích code từ response LLM (có thể là string hoặc JSON dict).
-
-    LLM có thể trả:
-    - string thuần (code trực tiếp)
-    - JSON {"code": "..."} (nếu dùng response_mime_type=application/json)
-    - string có chứa markdown code block ```python ... ```
-    """
+    """Trích code từ response LLM (có thể là string hoặc JSON dict)."""
     if isinstance(raw, dict):
         raw = raw.get("code", "")
 
     if not isinstance(raw, str):
         raw = str(raw)
 
-    # Trích khỏi markdown code block nếu có
     match = re.search(r"```(?:python)?\s*(.*?)```", raw, re.DOTALL)
     if match:
         return match.group(1).strip()
@@ -189,38 +164,21 @@ def generate(
     profile: DataProfile,
     llm: LLMClient,
     previous_error: str | None = None,
+    question: str = "",
 ) -> CodeGenResult:
-    """Sinh mã pandas cho DUY NHẤT MỘT AnalysisTask.
-
-    Args:
-        task: AnalysisTask đã được grounding-check bởi O2.
-        profile: DataProfile từ O1 — cung cấp tên cột thật để ground prompt.
-        llm: LLMClient (GeminiClient hoặc FakeLLM trong test).
-        previous_error: thông báo lỗi từ lần thực thi trước (nếu có).
-            Khi truyền vào, prompt sẽ kèm yêu cầu "sửa lỗi này" —
-            kỹ thuật error feedback của LIDA (Dibia, 2023).
-
-    Returns:
-        CodeGenResult với code hoàn chỉnh (scaffold đã được điền) và
-        expected_outputs tương ứng task.type.
-
-    Raises:
-        CodeGenerationError: khi LLM trả về nội dung không thể dùng được.
-    """
+    """Sinh mã pandas cho DUY NHẤT MỘT AnalysisTask."""
     if task.type not in _SCAFFOLDS:
         raise CodeGenerationError(
             f"Loại task '{task.type}' không có scaffold tương ứng. "
             f"Chỉ hỗ trợ: {sorted(_SCAFFOLDS)}"
         )
 
-    prompt = _build_prompt(task, profile, previous_error)
+    prompt = _build_prompt(task, profile, previous_error, question=question)
     logger.info("Đang sinh mã cho task.type=%r, metric=%r", task.type, task.metric)
 
     try:
         raw = llm.complete_json(prompt)
     except Exception as exc:
-        # Nếu LLM dùng response_mime_type=text thay vì json, thử dùng complete() fallback
-        # Ở đây raise lỗi rõ ràng để orchestrator xử lý
         raise CodeGenerationError(f"Lỗi khi gọi LLM: {exc}") from exc
 
     code = _extract_code(raw)
@@ -238,7 +196,4 @@ def generate(
 
 
 class CodeGenerationError(Exception):
-    """Raised khi không thể sinh mã hợp lệ từ LLM.
-
-    Orchestrator (analysis_runner.py) bắt lỗi này và đếm vào số lần thử.
-    """
+    """Raised khi không thể sinh mã hợp lệ từ LLM."""
