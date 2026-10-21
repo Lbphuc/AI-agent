@@ -250,7 +250,3 @@ class TestRunTask:
         # df đã lọc → số dòng phải ít hơn tổng 48 dòng
         received_len = result.results.get("trend", {}).get("len", len(doanh_thu_df))
         assert received_len < len(doanh_thu_df)
-
-
-def test_intentional_failure():
-    assert 1 == 2, "Cố tình tạo lỗi để kiểm tra Quality Gate!"

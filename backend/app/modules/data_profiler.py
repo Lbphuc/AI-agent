@@ -213,7 +213,15 @@ def profile(df: pd.DataFrame, n_samples: int = 3) -> DataProfile:
     time_col = _guess_time_column(df)
     time_min, time_max = _time_range(df, time_col)
     group_cols = _guess_group_columns(df, time_col)
-    numeric_cols = df.select_dtypes(include="number").columns.tolist()
+    raw_numeric_cols = df.select_dtypes(include="number").columns.tolist()
+    # Loại bỏ các cột định danh dạng ID/Mã/STT (ví dụ: Row ID, Order ID, STT, Mã) khỏi danh sách chỉ số phân tích
+    id_pattern = re.compile(r"(?i)(_id|id_|^id$|\bid\b|stt|mã|code|ma_)")
+    numeric_cols = [
+        col for col in raw_numeric_cols
+        if not id_pattern.search(col)
+    ]
+    if not numeric_cols:
+        numeric_cols = raw_numeric_cols
 
     columns: list[ColumnProfile] = []
     for col in df.columns:

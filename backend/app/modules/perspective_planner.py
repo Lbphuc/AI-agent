@@ -210,21 +210,43 @@ def perspective_trend_by_group(ctx: PerspectiveContext) -> ChartSpec | None:
         return None
 
     try:
-        grouped = (
-            ctx.df_filtered
-            .groupby([ctx.time_col, ctx.group_col])[ctx.primary_metric]
-            .sum()
-            .unstack()
-            .sort_index()
-        )
+        df_work = ctx.df_filtered.copy()
+        df_work["_dt"] = pd.to_datetime(df_work[ctx.time_col], errors="coerce")
+        df_work = df_work.dropna(subset=["_dt", ctx.primary_metric])
+
+        if len(df_work) < 2:
+            return None
+
+        # Sắp xếp theo đúng trình tự thời gian (tránh lỗi sắp xếp bảng chữ cái khiến tháng 10 nhảy trước tháng 3)
+        time_span_days = (df_work["_dt"].max() - df_work["_dt"].min()).days if len(df_work) > 1 else 0
+        n_unique_dates = df_work["_dt"].nunique()
+
+        # Nếu dữ liệu trải dài nhiều tháng (> 60 ngày) và nhiều mốc đơn lẻ (> 35), tự động gom nhóm theo Tháng
+        if time_span_days > 60 and n_unique_dates > 35:
+            df_work["_period"] = df_work["_dt"].dt.to_period("M").dt.to_timestamp()
+            grouped = (
+                df_work
+                .groupby(["_period", ctx.group_col])[ctx.primary_metric]
+                .sum()
+                .unstack()
+                .sort_index()
+            )
+            x = [pd.Timestamp(t).strftime("%Y-%m") for t in grouped.index]
+        else:
+            grouped = (
+                df_work
+                .groupby(["_dt", ctx.group_col])[ctx.primary_metric]
+                .sum()
+                .unstack()
+                .sort_index()
+            )
+            x = [pd.Timestamp(t).strftime("%Y-%m-%d") for t in grouped.index]
     except Exception as exc:
         logger.warning("Lỗi groupby trend_by_group: %s", exc)
         return None
 
     if len(grouped) < 2:
         return None
-
-    x = [str(t) for t in grouped.index]
     series = {
         str(col): [float(v) if pd.notna(v) else 0.0 for v in grouped[col]]
         for col in grouped.columns

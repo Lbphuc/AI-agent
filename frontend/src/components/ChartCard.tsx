@@ -39,6 +39,18 @@ const PALETTE = [
   "var(--chart-8)",
 ];
 
+// Bảng màu HEX chuẩn Okabe–Ito cho SVG gradient & phần tử không tương thích CSS var
+const HEX_PALETTE = [
+  "#56B4E9", // Okabe–Ito Sky Blue
+  "#E69F00", // Okabe–Ito Orange
+  "#2BC4A0", // Okabe–Ito Green
+  "#CC79A7", // Okabe–Ito Magenta
+  "#F0E442", // Okabe–Ito Yellow
+  "#7C9CFF", // Indigo
+  "#E07B54", // Vermilion
+  "#B0B8C8", // Slate
+];
+
 interface ChartCardProps {
   chart: ChartSpec;
   onSwitchChart?: (chart: ChartSpec, option: ChartOption) => void;
@@ -47,6 +59,7 @@ interface ChartCardProps {
 
 export const ChartCard: React.FC<ChartCardProps> = ({ chart, onSwitchChart, onResetToAuto }) => {
   const cardRef = useRef<HTMLDivElement>(null);
+  const cardUid = React.useId().replace(/[^a-zA-Z0-9_-]/g, "_");
   const [menuOpen, setMenuOpen] = useState(false);
   const [isExportingPng, setIsExportingPng] = useState(false);
   const [localChartType, setLocalChartType] = useState<ChartType | null>(null);
@@ -226,7 +239,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, onSwitchChart, onRe
           renderBoxPlot(currentChart, seriesKeys)
         ) : (
           <ResponsiveContainer width="100%" height={300}>
-            {renderChartByType(currentChart, chartData, seriesKeys, isContribution, isShare, isForecast, activeChartType)}
+            {renderChartByType(currentChart, chartData, seriesKeys, isContribution, isShare, isForecast, activeChartType, cardUid)}
           </ResponsiveContainer>
         )}
       </div>
@@ -525,9 +538,10 @@ function renderChartByType(
   data: Record<string, any>[],
   seriesKeys: string[],
   isContribution: boolean,
-  isShare: boolean,
+  _isShare: boolean,
   isForecast: boolean,
-  chartType: ChartType
+  chartType: ChartType,
+  cardUid: string = "card"
 ) {
   // Biểu đồ Phân tán (Scatter)
   if (chartType === "scatter" || chart.data_shape === "points") {
@@ -784,15 +798,18 @@ function renderChartByType(
         <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" width={85} />
         <Tooltip content={<CustomChartTooltip unit={chart.unit} isContribution={isContribution} />} />
         <Legend />
-        {seriesKeys.map((k, sIdx) => (
-          <Bar
-            key={k}
-            dataKey={k}
-            name={chart.display_name && seriesKeys.length === 1 ? chart.display_name : k}
-            fill={PALETTE[sIdx % PALETTE.length]}
-            radius={[0, 4, 4, 0]}
-          />
-        ))}
+        {seriesKeys.map((k, sIdx) => {
+          const isForecastKey = k.toLowerCase().includes("dự báo") || k.toLowerCase().includes("forecast");
+          return (
+            <Bar
+              key={k}
+              dataKey={k}
+              name={chart.display_name && seriesKeys.length === 1 ? chart.display_name : k}
+              fill={isForecastKey ? "var(--chart-2, #eab308)" : PALETTE[sIdx % PALETTE.length]}
+              radius={[0, 4, 4, 0]}
+            />
+          );
+        })}
       </BarChart>
     );
   }
@@ -834,7 +851,7 @@ function renderChartByType(
   }
 
   // Biểu đồ Tròn (Pie)
-  if (chartType === "pie" || isShare) {
+  if (chartType === "pie") {
     const rawEntries = (chart.x || []).map((name, i) => {
       const rawVal = Number(chart.series[seriesKeys[0]]?.[i] ?? 0);
       return {
@@ -907,10 +924,39 @@ function renderChartByType(
     );
   }
 
-  // ComposedChart / Forecast chart
+  // ComposedChart / Forecast chart - phân biệt rõ ràng giữa Area, Bar và Line trong chế độ Dự báo
   if (isForecast) {
+    const isAreaMode = chartType === "area";
+    const isBarMode = chartType === "bar";
+
     return (
       <ComposedChart data={data} accessibilityLayer={false} margin={{ top: 12, right: 16, left: 16, bottom: 25 }}>
+        <defs>
+          {seriesKeys.map((k, i) => {
+            const hex = HEX_PALETTE[i % HEX_PALETTE.length];
+            return (
+              <linearGradient
+                key={`fcGrad_${k}_${i}`}
+                id={`${cardUid}_fcArea_${i}`}
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop offset="0%" stopColor={hex} stopOpacity={0.65} style={{ stopColor: hex, stopOpacity: 0.65 }} />
+                <stop offset="70%" stopColor={hex} stopOpacity={0.25} style={{ stopColor: hex, stopOpacity: 0.25 }} />
+                <stop offset="100%" stopColor={hex} stopOpacity={0.05} style={{ stopColor: hex, stopOpacity: 0.05 }} />
+              </linearGradient>
+            );
+          })}
+          {/* Gradient riêng cho chuỗi Dự báo (Vàng hổ phách nổi bật) */}
+          <linearGradient id={`${cardUid}_fcArea_forecast`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#eab308" stopOpacity={0.65} style={{ stopColor: "#eab308", stopOpacity: 0.65 }} />
+            <stop offset="70%" stopColor="#eab308" stopOpacity={0.25} style={{ stopColor: "#eab308", stopOpacity: 0.25 }} />
+            <stop offset="100%" stopColor="#eab308" stopOpacity={0.05} style={{ stopColor: "#eab308", stopOpacity: 0.05 }} />
+          </linearGradient>
+        </defs>
+
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
         <XAxis
           dataKey="name"
@@ -924,6 +970,7 @@ function renderChartByType(
         <Tooltip content={<CustomChartTooltip unit={chart.unit} />} />
         <Legend />
 
+        {/* Dải tin cậy 80% */}
         {chart.band && (
           <>
             <Area
@@ -940,8 +987,8 @@ function renderChartByType(
               type="monotone"
               dataKey="_band_range"
               stackId="band_stack"
-              fill="var(--chart-2)"
-              fillOpacity={0.16}
+              fill="#eab308"
+              fillOpacity={0.18}
               stroke="none"
               name="Dải tin cậy 80%"
               connectNulls={false}
@@ -949,18 +996,56 @@ function renderChartByType(
           </>
         )}
 
+        {/* Vẽ từng chuỗi dữ liệu tùy theo loại biểu đồ (Area / Bar / Line) */}
         {seriesKeys.map((k, i) => {
           const isForecastKey = k.toLowerCase().includes("dự báo") || k.toLowerCase().includes("forecast");
+          const hex = HEX_PALETTE[i % HEX_PALETTE.length];
+
+          // 1. Nếu người dùng chọn Biểu đồ miền (Area): vẽ vùng phủ màu rõ ràng
+          if (isAreaMode) {
+            const fillUrl = isForecastKey ? `url(#${cardUid}_fcArea_forecast)` : `url(#${cardUid}_fcArea_${i})`;
+            return (
+              <Area
+                key={k}
+                type="monotone"
+                dataKey={k}
+                name={chart.display_name && seriesKeys.length === 1 ? chart.display_name : k}
+                stroke={isForecastKey ? "#eab308" : hex}
+                strokeWidth={isForecastKey ? 2.5 : 2.5}
+                strokeDasharray={isForecastKey ? "5 5" : undefined}
+                fill={fillUrl}
+                fillOpacity={1}
+                dot={isForecastKey ? { r: 5, fill: "#eab308" } : (data.length <= 30 ? { r: 3 } : false)}
+                connectNulls={false}
+              />
+            );
+          }
+
+          // 2. Nếu người dùng chọn Biểu đồ cột (Bar): vẽ dạng cột dọc
+          if (isBarMode) {
+            return (
+              <Bar
+                key={k}
+                dataKey={k}
+                name={chart.display_name && seriesKeys.length === 1 ? chart.display_name : k}
+                fill={isForecastKey ? "#eab308" : hex}
+                radius={[4, 4, 0, 0]}
+                maxBarSize={48}
+              />
+            );
+          }
+
+          // 3. Mặc định là Biểu đồ đường (Line): chỉ vẽ đường kẻ thanh mảnh, không đổ bóng màu nền
           return (
             <Line
               key={k}
               type="monotone"
               dataKey={k}
               name={chart.display_name && seriesKeys.length === 1 ? chart.display_name : k}
-              stroke={isForecastKey ? "var(--chart-2)" : PALETTE[i % PALETTE.length]}
+              stroke={isForecastKey ? "#eab308" : hex}
               strokeWidth={isForecastKey ? 2.5 : 2}
               strokeDasharray={isForecastKey ? "5 5" : undefined}
-              dot={{ r: isForecastKey ? 4 : 3 }}
+              dot={isForecastKey ? { r: 5, fill: "#eab308" } : (data.length <= 30 ? { r: 3 } : false)}
               connectNulls={false}
             />
           );
@@ -969,13 +1054,15 @@ function renderChartByType(
         {chart.forecast_from && (
           <ReferenceLine
             x={chart.forecast_from}
-            stroke="var(--text-muted)"
-            strokeDasharray="3 3"
+            stroke="#eab308"
+            strokeDasharray="4 4"
+            strokeWidth={1.5}
             label={{
-              value: "Dự báo",
+              value: "▶ Bắt đầu dự báo",
               position: "top",
-              fill: "var(--text-muted)",
+              fill: "#eab308",
               fontSize: 11,
+              fontWeight: 600,
             }}
           />
         )}
@@ -983,10 +1070,29 @@ function renderChartByType(
     );
   }
 
-  // Area
+  // Biểu đồ miền (Area) ở chế độ thông thường
   if (chartType === "area") {
     return (
       <AreaChart data={data} accessibilityLayer={false} margin={{ top: 12, right: 16, left: 16, bottom: 25 }}>
+        <defs>
+          {seriesKeys.map((k, i) => {
+            const hex = HEX_PALETTE[i % HEX_PALETTE.length];
+            return (
+              <linearGradient
+                key={`grad_area_${k}_${i}`}
+                id={`${cardUid}_grad_area_${i}`}
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop offset="0%" stopColor={hex} stopOpacity={0.65} style={{ stopColor: hex, stopOpacity: 0.65 }} />
+                <stop offset="70%" stopColor={hex} stopOpacity={0.25} style={{ stopColor: hex, stopOpacity: 0.25 }} />
+                <stop offset="100%" stopColor={hex} stopOpacity={0.05} style={{ stopColor: hex, stopOpacity: 0.05 }} />
+              </linearGradient>
+            );
+          })}
+        </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
         <XAxis
           dataKey="name"
@@ -999,22 +1105,27 @@ function renderChartByType(
         <YAxis stroke="var(--text-secondary)" tickFormatter={(v) => formatNumber(v)} />
         <Tooltip content={<CustomChartTooltip unit={chart.unit} />} />
         <Legend />
-        {seriesKeys.map((k, i) => (
-          <Area
-            key={k}
-            type="monotone"
-            dataKey={k}
-            name={chart.display_name && seriesKeys.length === 1 ? chart.display_name : k}
-            fill={PALETTE[i % PALETTE.length]}
-            stroke={PALETTE[i % PALETTE.length]}
-            fillOpacity={0.25}
-          />
-        ))}
+        {seriesKeys.map((k, i) => {
+          const hex = HEX_PALETTE[i % HEX_PALETTE.length];
+          return (
+            <Area
+              key={k}
+              type="monotone"
+              dataKey={k}
+              name={chart.display_name && seriesKeys.length === 1 ? chart.display_name : k}
+              fill={`url(#${cardUid}_grad_area_${i})`}
+              fillOpacity={1}
+              stroke={hex}
+              strokeWidth={2.5}
+              dot={data.length <= 30 ? { r: 3 } : false}
+            />
+          );
+        })}
       </AreaChart>
     );
   }
 
-  // Line
+  // Biểu đồ đường (Line) ở chế độ thông thường
   if (chartType === "line") {
     return (
       <LineChart data={data} accessibilityLayer={false} margin={{ top: 12, right: 16, left: 16, bottom: 25 }}>
@@ -1040,7 +1151,7 @@ function renderChartByType(
               name={chart.display_name && seriesKeys.length === 1 ? chart.display_name : k}
               stroke={PALETTE[i % PALETTE.length]}
               strokeWidth={isHighlighted ? 3.5 : 2}
-              dot={{ r: isHighlighted ? 4 : 3 }}
+              dot={data.length <= 30 ? { r: isHighlighted ? 4 : 3 } : false}
             />
           );
         })}

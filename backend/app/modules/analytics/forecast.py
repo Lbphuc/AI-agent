@@ -193,6 +193,18 @@ def run_forecast(
     series_df, prep_warns = prepare_regular_series(df, time_col, metric, group_col=None)
     warnings.extend(prep_warns)
 
+    # Tối ưu chuỗi thời gian: nếu chuỗi dạng ngày nhưng kéo dài nhiều tháng (> 90 ngày và > 45 điểm),
+    # tự động gom nhóm theo Tháng (Monthly Resampling) để dự báo mang ý nghĩa chu kỳ tháng/quý
+    is_monthly = False
+    if len(series_df) > 45 and pd.api.types.is_datetime64_any_dtype(series_df.index):
+        span_days = (series_df.index.max() - series_df.index.min()).days
+        if span_days > 90:
+            monthly_agg = series_df.resample("MS").sum()
+            if len(monthly_agg) >= 15:
+                series_df = monthly_agg
+                cycle_len = 12
+                is_monthly = True
+
     n_points = len(series_df)
     if n_points < 15:
         reason = f"Dữ liệu có {n_points} kỳ, cần ít nhất 15 kỳ để chia mẫu huấn luyện và kiểm định sai số dự báo."
@@ -257,7 +269,7 @@ def run_forecast(
     last_dt = pd.Timestamp(series_df.index[-1])
     future_dates = []
     for step in range(1, h + 1):
-        if cycle_len == 12:
+        if cycle_len == 12 or is_monthly:
             next_dt = last_dt + pd.DateOffset(months=step)
             future_dates.append(next_dt.strftime("%Y-%m"))
         elif cycle_len == 7:
@@ -286,6 +298,7 @@ def run_forecast(
         lower_with_nulls.append(round(low_v, 1))
         upper_with_nulls.append(round(up_v, 1))
 
+    period_unit_name = "tháng" if is_monthly else ("ngày" if cycle_len == 7 else "kỳ")
     caption = (
         f"Mô hình: {best_model_display} (MAPE backtest: {best_mape:.1f}%, độ tin cậy: {confidence_level.title()}). "
         f"Dải bất định 80% phản ánh sai số kiểm định thực tế."
@@ -294,7 +307,7 @@ def run_forecast(
     charts.append(
         ChartSpec(
             chart_type="line",
-            title=f"Dự báo xu hướng {metric_disp} ({h} kỳ tới)",
+            title=f"Dự báo xu hướng {metric_disp} ({h} {period_unit_name} tới)",
             x=x_all,
             series={
                 "Thực tế": y_hist_with_nulls,
