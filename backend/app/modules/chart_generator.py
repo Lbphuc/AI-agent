@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 from typing import Literal, Optional
+import pandas as pd
 
 from ..schemas import (
     AnalysisLevel,
@@ -79,8 +80,8 @@ def _pick_chart_type(
     return auto_pick(level, task, ctx)
 
 
-def _build_title(task: AnalysisTask) -> str:
-    """Sinh tiêu đề biểu đồ từ task.type và tên cột đã Việt hóa (A6)."""
+def _build_title(task: AnalysisTask, series_vals: list[float] | None = None) -> str:
+    """Sinh tiêu đề biểu đồ từ task.type, tên cột đã Việt hóa và dữ liệu thực tế."""
     metric_disp, _ = resolve_column_display(task.metric)
     group_disp, _ = resolve_column_display(task.group_by) if task.group_by else ("", None)
 
@@ -89,9 +90,19 @@ def _build_title(task: AnalysisTask) -> str:
     if task.type == "comparison":
         return f"So sánh {metric_disp} theo {group_disp}"
     if task.type == "growth_rate":
-        verb = "giảm" if task.find == "min" else "tăng"
         prefix = f"{group_disp} " if group_disp else ""
-        return f"{prefix}{verb} mạnh nhất — {metric_disp}"
+        if series_vals and len(series_vals) > 0:
+            all_neg = max(series_vals) < 0
+            all_pos = min(series_vals) > 0
+            if all_neg:
+                verb = "suy giảm mạnh nhất" if task.find == "min" else "suy giảm ít nhất"
+            elif all_pos:
+                verb = "tăng trưởng chậm nhất" if task.find == "min" else "tăng trưởng mạnh nhất"
+            else:
+                verb = "giảm mạnh nhất" if task.find == "min" else "tăng mạnh nhất"
+        else:
+            verb = "giảm mạnh nhất" if task.find == "min" else "tăng mạnh nhất"
+        return f"{prefix}{verb} — {metric_disp} (%)"
     return metric_disp
 
 
@@ -258,6 +269,22 @@ def enrich_chart_spec(chart: ChartSpec) -> ChartSpec:
             if not any("tuyệt đối" in n for n in chart.notes):
                 chart.notes.append(note_text)
 
+    # Đảm bảo mọi ChartSpec đều có options lựa chọn chuyển đổi loại biểu đồ
+    if not chart.options:
+        is_forecast = bool(chart.forecast_from or chart.band)
+        lvl: AnalysisLevel = "forecast" if is_forecast else "descriptive"
+        ctx = ChartContext(
+            n_points=len(x_labels),
+            has_negative=any(v < 0 for v in series_vals),
+            n_group_cols=1,
+            has_time=is_forecast or any(w in (chart.title or "").lower() for w in ("thời gian", "kỳ", "tháng", "năm", "ngày", "xu hướng", "diễn biến")),
+            n_periods=len(x_labels),
+            additivity="yes" if chart.unit != "%" else "no",
+            max_label_len=max((len(str(lbl)) for lbl in x_labels), default=0),
+            metric=metric_disp,
+        )
+        chart.options = list_options(lvl, chart.chart_type, ctx)
+
     return chart
 
 
@@ -296,6 +323,25 @@ def _build_chart(
             series_vals.append(0.0 if (val_float != val_float) else val_float)
         except (ValueError, TypeError):
             series_vals.append(0.0)
+
+    # Nếu là task trend: Chuẩn hóa theo trình tự thời gian và resampling nếu dữ liệu quá dày
+    if task.type == "trend" and len(data) >= 2:
+        try:
+            parsed_dates = pd.to_datetime(list(data.keys()), errors="coerce")
+            if not parsed_dates.isna().any():
+                s = pd.Series(series_vals, index=parsed_dates).sort_index()
+                time_span_days = (s.index.max() - s.index.min()).days
+                # Nếu chuỗi trải dài > 60 ngày và có nhiều hơn 35 mốc đơn lẻ, gom nhóm theo Tháng
+                if time_span_days > 60 and len(s) > 35:
+                    agg_fn = "mean" if ("tỷ lệ" in str(task.metric).lower() or "rate" in str(task.metric).lower()) else "sum"
+                    s_monthly = s.resample("MS").agg(agg_fn)
+                    x = [d.strftime("%Y-%m") for d in s_monthly.index]
+                    series_vals = [round(float(v), 2) for v in s_monthly.values]
+                else:
+                    x = [d.strftime("%Y-%m") if (d.day == 1 and time_span_days > 60) else d.strftime("%Y-%m-%d") for d in s.index]
+                    series_vals = [round(float(v), 2) for v in s.values]
+        except Exception as exc:
+            logger.warning("Không thể chuẩn hóa chuỗi thời gian cho task trend: %s", exc)
 
     # Xac dinh loai bieu do va che do chon (auto vs user)
     selection: Literal["auto", "user"] = "auto"
@@ -401,14 +447,22 @@ def _build_chart(
         if not any(f"Bạn đã chọn {disp}" in n or f"Biểu đồ do bạn chọn: {disp}" in n for n in chart_notes):
             chart_notes.insert(0, f"Biểu đồ do bạn chọn: {disp}")
 
+    chart_unit = "%" if task.type == "growth_rate" else unit
+    if task.type == "growth_rate":
+        series_key = "% Thay đổi"
+        disp_name = f"% Thay đổi {metric_disp}"
+    else:
+        series_key = task.metric
+        disp_name = metric_disp
+
     return ChartSpec(
         chart_type=chart_type,
-        title=_build_title(task),
+        title=_build_title(task, series_vals),
         x=x,
-        series={task.metric: final_series_vals},
+        series={series_key: final_series_vals},
         highlight_x=highlight_x,
-        display_name=metric_disp,
-        unit=unit,
+        display_name=disp_name,
+        unit=chart_unit,
         data_shape=data_shape,
         selection=selection,
         notes=chart_notes,

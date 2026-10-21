@@ -73,45 +73,50 @@ class QuestionInterpretationError(Exception):
 
 FEW_SHOT_EXAMPLES = """Ví dụ 1 (xu hướng theo thời gian):
 Câu hỏi: "Doanh thu thay đổi thế nào theo từng tháng?"
-JSON: {"time_scope": "last_12_months", "levels": ["descriptive"], "tasks": [
+JSON: {"objective": "overview", "time_scope": "last_12_months", "levels": ["descriptive"], "tasks": [
   {"type": "trend", "metric": "Doanh_thu_trieu_vnd", "group_by": null, "find": null}
 ]}
 
-Ví dụ 2 (hỏi nguyên nhân / tại sao):
-Câu hỏi: "Vì sao doanh thu Đà Nẵng giảm trong năm qua?"
-JSON: {"time_scope": "last_12_months", "levels": ["descriptive", "diagnostic"], "tasks": [
-  {"type": "growth_rate", "metric": "Doanh_thu_trieu_vnd", "group_by": "Chi_nhanh", "find": "min"}
+Ví dụ 2 (xác định đóng góp vào mức thay đổi tổng thể):
+Câu hỏi: "Yếu tố nào đóng góp lớn nhất vào thay đổi Sales?"
+JSON: {"objective": "contribution_to_change", "time_scope": "last_12_months", "levels": ["diagnostic", "descriptive"], "tasks": [
+  {"type": "comparison", "metric": "Sales", "group_by": "Category", "find": null}
 ]}
 
-Ví dụ 3 (hỏi tương lai / dự báo):
-Câu hỏi: "Doanh thu quý tới dự kiến ra sao?"
-JSON: {"time_scope": "last_12_months", "levels": ["descriptive", "forecast"], "tasks": [
-  {"type": "trend", "metric": "Doanh_thu_trieu_vnd", "group_by": null, "find": null}
+Ví dụ 3 (tìm nhóm tăng trưởng mạnh nhất):
+Câu hỏi: "Category nào tăng trưởng mạnh nhất?"
+JSON: {"objective": "top_growers", "time_scope": "last_12_months", "levels": ["descriptive"], "tasks": [
+  {"type": "growth_rate", "metric": "Sales", "group_by": "Category", "find": "max"}
 ]}
 
-Ví dụ 4 (hỏi đề xuất / nên làm gì):
-Câu hỏi: "Nên ưu tiên chi nhánh nào để cải thiện doanh thu?"
-JSON: {"time_scope": "last_12_months", "levels": ["descriptive", "prescriptive"], "tasks": [
-  {"type": "comparison", "metric": "Doanh_thu_trieu_vnd", "group_by": "Chi_nhanh", "find": null}
+Ví dụ 4 (tìm nhóm làm giảm nhiều nhất / sụt giảm mạnh nhất):
+Câu hỏi: "Category nào làm giảm Sales nhiều nhất?"
+JSON: {"objective": "top_decliners", "time_scope": "last_12_months", "levels": ["descriptive", "diagnostic"], "tasks": [
+  {"type": "growth_rate", "metric": "Sales", "group_by": "Category", "find": "min"}
 ]}
 
-Ví dụ 5 (hỏi kết hợp nguyên nhân và dự báo):
-Câu hỏi: "Vì sao Đà Nẵng giảm và tháng tới sẽ ra sao?"
-JSON: {"time_scope": "last_12_months", "levels": ["descriptive", "diagnostic", "forecast"], "tasks": [
-  {"type": "trend", "metric": "Doanh_thu_trieu_vnd", "group_by": null, "find": null},
-  {"type": "growth_rate", "metric": "Doanh_thu_trieu_vnd", "group_by": "Chi_nhanh", "find": "min"}
+Ví dụ 5 (so sánh quy mô lớn nhất / cao nhất):
+Câu hỏi: "Ship Mode nào có doanh thu cao nhất?"
+JSON: {"objective": "comparison", "time_scope": "last_12_months", "levels": ["descriptive"], "tasks": [
+  {"type": "comparison", "metric": "Sales", "group_by": "Ship_Mode", "find": "max"}
 ]}
 
-Ví dụ 6 (khoảng thời gian tùy chỉnh):
+Ví dụ 6 (đề xuất hành động / ưu tiên chiến lược):
+Câu hỏi: "Nên ưu tiên Ship Mode nào để cải thiện Sales?"
+JSON: {"objective": "prescriptive_action", "time_scope": "last_12_months", "levels": ["descriptive", "diagnostic", "prescriptive"], "tasks": [
+  {"type": "comparison", "metric": "Sales", "group_by": "Ship_Mode", "find": null}
+]}
+
+Ví dụ 7 (dự báo tương lai kèm số kỳ):
+Câu hỏi: "Xu hướng Sales trong ba kỳ tiếp theo ra sao?"
+JSON: {"objective": "forecast", "time_scope": "last_12_months", "forecast_horizon": 3, "levels": ["descriptive", "forecast"], "tasks": [
+  {"type": "trend", "metric": "Sales", "group_by": null, "find": null}
+]}
+
+Ví dụ 8 (khoảng thời gian tùy chỉnh):
 Câu hỏi: "Doanh thu từ tháng 1 đến tháng 6 năm nay thế nào?"
-JSON: {"time_scope": "custom", "custom_start": "2026-01", "custom_end": "2026-06", "levels": ["descriptive"], "tasks": [
+JSON: {"objective": "overview", "time_scope": "custom", "custom_start": "2026-01", "custom_end": "2026-06", "levels": ["descriptive"], "tasks": [
   {"type": "trend", "metric": "Doanh_thu_trieu_vnd", "group_by": null, "find": null}
-]}
-
-Ví dụ 7 (gợi ý biểu đồ tỷ trọng — chart_hint="pie"):
-Câu hỏi: "Doanh thu mỗi chi nhánh chiếm bao nhiêu phần trăm tổng doanh thu?"
-JSON: {"time_scope": "last_12_months", "levels": ["descriptive"], "tasks": [
-  {"type": "comparison", "metric": "Doanh_thu_trieu_vnd", "group_by": "Chi_nhanh", "find": null, "chart_hint": "pie"}
 ]}"""
 
 
@@ -135,11 +140,20 @@ Cột thời gian: {time_info}
 Cột nhóm (dùng cho "group_by"): {group_list}
 Cột số (dùng cho "metric"): {numeric_list}
 
-Chỉ có 3 loại phân tích ("type") hợp lệ:
+Chỉ có 3 loại phân tích ("type") hợp lệ trong tasks:
 - "trend": xu hướng một chỉ số theo thời gian (không cần group_by)
 - "comparison": so sánh một chỉ số giữa các nhóm (BẮT BUỘC có group_by)
 - "growth_rate": tính % tăng/giảm theo nhóm; dùng "find":"min" để tìm
   nhóm giảm/tăng ít nhất, "find":"max" để tìm nhóm tăng nhiều nhất
+
+Trường "objective" (mục tiêu cốt lõi):
+- "overview": tổng quan tình hình chung
+- "comparison": so sánh quy mô giữa các nhóm
+- "top_growers": tìm nhóm tăng trưởng mạnh nhất
+- "top_decliners": tìm nhóm giảm sút nhiều nhất / làm giảm nhiều nhất
+- "contribution_to_change": xác định mức đóng góp vào thay đổi tổng thể
+- "forecast": dự báo xu hướng tương lai
+- "prescriptive_action": đề xuất hành động / nên ưu tiên gì để cải thiện
 
 Chỉ có 5 giá trị "time_scope" hợp lệ: "all", "last_3_months",
 "last_6_months", "last_12_months", "custom". CHỈ chọn NHÃN, KHÔNG tự
@@ -148,16 +162,10 @@ tính ngày cụ thể. Nếu chọn "custom", thêm 2 trường "custom_start" 
 gian, dùng "last_12_months".
 
 Trường "levels": danh sách các mức phân tích mà câu hỏi đang hỏi (luôn gồm "descriptive"):
-- "diagnostic": hỏi VÌ SAO / do đâu / điều gì kéo tăng–giảm / yếu tố ảnh hưởng
-- "forecast": hỏi TƯƠNG LAI: sắp tới, quý tới, dự báo, dự kiến
-- "prescriptive": hỏi NÊN LÀM GÌ / đề xuất / khuyến nghị / cần ưu tiên gì
-Chỉ thêm khi câu hỏi nói rõ. Nếu chỉ hỏi số liệu hiện tại hoặc câu hỏi chung ("Doanh thu năm nay thế nào?") thì chỉ ["descriptive"].
-
-Ngoài ra, mỗi task có thể thêm trường "chart_hint" (tùy chọn, chỉ 2 giá
-trị): "pie" nếu câu hỏi ngụ ý TỶ TRỌNG/CƠ CẤU của một tổng thể (ví dụ
-"chiếm bao nhiêu phần trăm", "cơ cấu"); "area" nếu câu hỏi nhấn mạnh
-KHỐI LƯỢNG/TÍCH LŨY theo thời gian (ví dụ "tổng tích lũy"). Nếu không
-chắc, để null — KHÔNG được gợi ý "pie" cho loại "growth_rate".
+- "diagnostic": hỏi VÌ SAO / do đâu / điều gì kéo tăng–giảm / yếu tố đóng góp / nguyên nhân
+- "forecast": hỏi TƯƠNG LAI: sắp tới, quý tới, dự báo, dự kiến, các kỳ tiếp theo
+- "prescriptive": hỏi NÊN LÀM GÌ / đề xuất / khuyến nghị / cần ưu tiên gì để cải thiện
+Chỉ thêm khi câu hỏi nói rõ.
 
 {FEW_SHOT_EXAMPLES}
 
@@ -282,15 +290,74 @@ def _parse_and_validate(question: str, raw: dict, profile: DataProfile) -> Analy
 
     # Heuristic bo sung neu LLM quen kem levels theo tu khoa ro rang
     q_lower = question.lower()
-    if any(w in q_lower for w in ["vì sao", "tai sao", "tại sao", "nguyên nhân", "do đâu", "ly do", "lý do"]):
+    if any(w in q_lower for w in ["vì sao", "tai sao", "tại sao", "nguyên nhân", "do đâu", "ly do", "lý do", "đóng góp"]):
         if "diagnostic" not in parsed_levels:
             parsed_levels.append("diagnostic")
-    if any(w in q_lower for w in ["dự báo", "du bao", "dự đoán", "du doan", "quý tới", "tháng tới", "sắp tới", "tương lai", "kỳ tới"]):
+    if any(w in q_lower for w in ["dự báo", "du bao", "dự đoán", "du doan", "quý tới", "tháng tới", "sắp tới", "tương lai", "kỳ tới", "tiếp theo"]):
         if "forecast" not in parsed_levels:
             parsed_levels.append("forecast")
-    if any(w in q_lower for w in ["nên làm gì", "đề xuất", "de xuat", "khuyến nghị", "khuyen nghi", "chiến lược", "chien luoc", "ưu tiên"]):
+    if any(w in q_lower for w in ["nên làm gì", "đề xuất", "de xuat", "khuyến nghị", "khuyen nghi", "chiến lược", "chien luoc", "ưu tiên", "để cải thiện"]):
         if "prescriptive" not in parsed_levels:
             parsed_levels.append("prescriptive")
+
+    # Xác định objective cốt lõi theo mục 4.3 & 4.4 của writing-block (1).md
+    raw_objective = raw.get("objective")
+    objective = None
+    if raw_objective in ("overview", "comparison", "top_growers", "top_decliners", "contribution_to_change", "forecast", "prescriptive_action"):
+        objective = raw_objective
+    else:
+        if any(w in q_lower for w in ["đóng góp", "dong gop", "thay đổi tổng", "thay doi tong", "đóng góp lớn nhất"]):
+            objective = "contribution_to_change"
+        elif any(w in q_lower for w in ["giảm nhiều nhất", "giam nhieu nhat", "giảm mạnh nhất", "giam manh nhat", "làm giảm", "lam giam"]):
+            objective = "top_decliners"
+        elif any(w in q_lower for w in ["tăng trưởng mạnh nhất", "tang truong manh nhat", "tăng mạnh nhất", "tang manh nhat", "tăng nhiều nhất"]):
+            objective = "top_growers"
+        elif any(w in q_lower for w in ["nên ưu tiên", "nen uu tien", "đề xuất", "de xuat", "khuyến nghị", "khuyen nghi", "để cải thiện"]):
+            objective = "prescriptive_action"
+        elif any(w in q_lower for w in ["dự báo", "du bao", "sắp tới", "sap toi", "quý tới", "quy toi", "kỳ tới", "tiếp theo"]):
+            objective = "forecast"
+        elif any(w in q_lower for w in ["cao nhất", "lớn nhất", "nhiều nhất", "so sánh"]):
+            objective = "comparison"
+        else:
+            objective = "overview"
+
+    # Bảo toàn mục tiêu: Đồng bộ tasks và levels theo objective (đưa level trọng tâm lên đầu)
+    if objective == "contribution_to_change":
+        if "diagnostic" not in parsed_levels:
+            parsed_levels.append("diagnostic")
+        parsed_levels = ["diagnostic"] + [lvl for lvl in parsed_levels if lvl != "diagnostic"]
+    elif objective == "top_decliners":
+        if tasks and tasks[0].find != "min":
+            tasks[0].find = "min"
+        if "diagnostic" not in parsed_levels:
+            parsed_levels.append("diagnostic")
+        parsed_levels = ["diagnostic"] + [lvl for lvl in parsed_levels if lvl != "diagnostic"]
+    elif objective == "top_growers":
+        if tasks and tasks[0].find != "max":
+            tasks[0].find = "max"
+    elif objective == "prescriptive_action":
+        if "diagnostic" not in parsed_levels:
+            parsed_levels.append("diagnostic")
+        if "prescriptive" not in parsed_levels:
+            parsed_levels.append("prescriptive")
+        parsed_levels = ["prescriptive"] + [lvl for lvl in parsed_levels if lvl != "prescriptive"]
+    elif objective == "forecast":
+        if "forecast" not in parsed_levels:
+            parsed_levels.append("forecast")
+        parsed_levels = ["forecast"] + [lvl for lvl in parsed_levels if lvl != "forecast"]
+
+    primary_metric = tasks[0].metric if tasks else None
+    primary_dimension = tasks[0].group_by if tasks else None
+
+    # Tự động trích xuất forecast_horizon nếu có
+    forecast_horizon = raw.get("forecast_horizon")
+    if not forecast_horizon:
+        if any(w in q_lower for w in ["ba kỳ", "3 kỳ", "3 thang", "3 tháng", "quý tới"]):
+            forecast_horizon = 3
+        elif any(w in q_lower for w in ["sáu kỳ", "6 kỳ", "6 thang", "6 tháng"]):
+            forecast_horizon = 6
+        elif "forecast" in parsed_levels:
+            forecast_horizon = 3
 
     return AnalysisGoal(
         question=question,
@@ -299,6 +366,11 @@ def _parse_and_validate(question: str, raw: dict, profile: DataProfile) -> Analy
         time_end=time_end,
         tasks=tasks,
         levels=parsed_levels,
+        objective=objective,
+        metric=primary_metric,
+        dimension=primary_dimension,
+        forecast_horizon=forecast_horizon,
+        analysis_methods=parsed_levels,
     )
 
 

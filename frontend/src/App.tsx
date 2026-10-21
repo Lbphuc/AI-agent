@@ -689,6 +689,35 @@ export default function App() {
     return null;
   }, [descriptiveResult, interpretResponse]);
 
+  // Xác định cấp độ phân tích trọng tâm (Primary Focus Level) theo câu hỏi
+  const effectivePrimaryLevel: AnalysisLevel = useMemo(() => {
+    if (mode !== "auto") return mode;
+    const obj = interpretResponse?.goal?.objective;
+    if (obj === "contribution_to_change" || obj === "top_decliners" || (interpretResponse?.goal?.levels && interpretResponse.goal.levels[0] === "diagnostic")) {
+      return "diagnostic";
+    }
+    if (obj === "forecast" || (interpretResponse?.goal?.levels && interpretResponse.goal.levels[0] === "forecast")) {
+      return "forecast";
+    }
+    if (obj === "prescriptive_action" || (interpretResponse?.goal?.levels && interpretResponse.goal.levels[0] === "prescriptive")) {
+      return "prescriptive";
+    }
+    return "descriptive";
+  }, [mode, interpretResponse]);
+
+  const primaryMethodName = useMemo(() => {
+    switch (effectivePrimaryLevel) {
+      case "diagnostic":
+        return "Tìm nguyên nhân (Chẩn đoán)";
+      case "forecast":
+        return "Dự báo xu hướng";
+      case "prescriptive":
+        return "Gợi ý chiến lược";
+      default:
+        return "Tổng quan mô tả";
+    }
+  }, [effectivePrimaryLevel]);
+
   // Model dữ liệu báo cáo cho trang in ẩn (#print-root)
   const reportModel = useMemo(() => {
     if (!descriptiveResult) return null;
@@ -696,9 +725,10 @@ export default function App() {
       descriptiveResult,
       file?.name || "data.csv",
       exportSections,
-      reportOrgName
+      reportOrgName,
+      deepenResults
     );
-  }, [descriptiveResult, file, exportSections, reportOrgName]);
+  }, [descriptiveResult, file, exportSections, reportOrgName, deepenResults]);
 
   // Xử lý xuất báo cáo theo các định dạng
   const handleExport = useCallback(
@@ -938,6 +968,7 @@ export default function App() {
               <ResultToolbar
                 chartCount={(descriptiveResult?.charts.length || 0) + (deepenResults.diagnostic?.sections[0]?.charts.length || 0)}
                 timeRangeStr={timeRangeStr}
+                primaryMethod={primaryMethodName}
                 onOpenExport={() => setIsExportOpen(true)}
               />
 
@@ -977,17 +1008,8 @@ export default function App() {
                 </div>
               )}
 
-              {/* Nhận xét AI cấp mô tả */}
-              {descriptiveResult?.insight && (
-                <InsightCard
-                  insight={descriptiveResult.insight}
-                  goal={descriptiveResult.goal}
-                  meta={descriptiveResult.meta}
-                />
-              )}
-
-              {/* KHU VỰC ƯU TIÊN: Cấp độ đang chọn được hiển thị ngay bên trên */}
-              {mode === "diagnostic" && !dismissedLevels.has("diagnostic") && (
+              {/* KHU VỰC ƯU TIÊN: Cấp độ phân tích trọng tâm được hiển thị ngay bên trên */}
+              {effectivePrimaryLevel === "diagnostic" && !dismissedLevels.has("diagnostic") && (
                 <DeepenSection
                   level="diagnostic"
                   data={deepenResults.diagnostic}
@@ -997,7 +1019,7 @@ export default function App() {
                 />
               )}
 
-              {mode === "forecast" && !dismissedLevels.has("forecast") && (
+              {effectivePrimaryLevel === "forecast" && !dismissedLevels.has("forecast") && (
                 <DeepenSection
                   level="forecast"
                   data={deepenResults.forecast}
@@ -1007,13 +1029,22 @@ export default function App() {
                 />
               )}
 
-              {mode === "prescriptive" && !dismissedLevels.has("prescriptive") && (
+              {effectivePrimaryLevel === "prescriptive" && !dismissedLevels.has("prescriptive") && (
                 <DeepenSection
                   level="prescriptive"
                   data={deepenResults.prescriptive}
                   loading={deepenLoading.prescriptive}
                   onSwitchChart={handleSwitchChart}
                   onResetToAuto={handleResetCardToAuto}
+                />
+              )}
+
+              {/* Nhận xét AI cấp mô tả */}
+              {descriptiveResult?.insight && (
+                <InsightCard
+                  insight={descriptiveResult.insight}
+                  goal={descriptiveResult.goal}
+                  meta={descriptiveResult.meta}
                 />
               )}
 
@@ -1026,8 +1057,8 @@ export default function App() {
                 />
               )}
 
-              {/* Các cấp phân tích phụ khác nếu được bật hoặc tự động suy ra */}
-              {mode !== "diagnostic" && deepenResults.diagnostic && !dismissedLevels.has("diagnostic") && (
+              {/* Các cấp phân tích phụ khác nếu chưa hiển thị ở trên */}
+              {effectivePrimaryLevel !== "diagnostic" && deepenResults.diagnostic && !dismissedLevels.has("diagnostic") && (
                 <DeepenSection
                   level="diagnostic"
                   data={deepenResults.diagnostic}
@@ -1037,7 +1068,7 @@ export default function App() {
                 />
               )}
 
-              {mode !== "forecast" && deepenResults.forecast && !dismissedLevels.has("forecast") && (
+              {effectivePrimaryLevel !== "forecast" && deepenResults.forecast && !dismissedLevels.has("forecast") && (
                 <DeepenSection
                   level="forecast"
                   data={deepenResults.forecast}
@@ -1047,7 +1078,7 @@ export default function App() {
                 />
               )}
 
-              {mode !== "prescriptive" && deepenResults.prescriptive && !dismissedLevels.has("prescriptive") && (
+              {effectivePrimaryLevel !== "prescriptive" && deepenResults.prescriptive && !dismissedLevels.has("prescriptive") && (
                 <DeepenSection
                   level="prescriptive"
                   data={deepenResults.prescriptive}

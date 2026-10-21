@@ -69,14 +69,23 @@ def run_diagnostic(
     tot_delta = float(comp_df["delta"].sum())
     tot_prev = float(comp_df["prev_val"].sum())
     tot_curr = float(comp_df["curr_val"].sum())
+    tot_abs_sum = float(comp_df["delta"].abs().sum())
     tot_pct = (tot_delta / tot_prev * 100.0) if abs(tot_prev) > 1e-6 else 0.0
+    is_offsetting = abs(tot_delta) <= 1.0 and tot_abs_sum > 2.0
 
     action_word = "tăng" if tot_delta >= 0 else "giảm"
-    f1_text = (
-        f"Tổng {metric_disp} {n_window} kỳ gần nhất {action_word} {_fmt_num(abs(tot_delta))}{unit_str} "
-        f"({_fmt_num(tot_pct, 1, force_sign=True)}%) so với {n_window} kỳ trước "
-        f"({_fmt_num(tot_curr)} vs {_fmt_num(tot_prev)})."
-    )
+    if is_offsetting:
+        f1_text = (
+            f"Tổng {metric_disp} {n_window} kỳ gần nhất biến động không đáng kể ({_fmt_num(tot_delta, force_sign=True)}{unit_str}) "
+            f"do các nhóm bù trừ lẫn nhau ({_fmt_num(tot_curr)} vs {_fmt_num(tot_prev)}), "
+            f"nhưng có sự chuyển dịch nội bộ đáng chú ý."
+        )
+    else:
+        f1_text = (
+            f"Tổng {metric_disp} {n_window} kỳ gần nhất {action_word} {_fmt_num(abs(tot_delta))}{unit_str} "
+            f"({_fmt_num(tot_pct, 1, force_sign=True)}%) so với {n_window} kỳ trước "
+            f"({_fmt_num(tot_curr)} vs {_fmt_num(tot_prev)})."
+        )
     facts.append(
         Fact(
             id="F1",
@@ -89,15 +98,33 @@ def run_diagnostic(
         )
     )
 
+    # Sắp xếp danh sách đóng góp theo mục tiêu câu hỏi (writing-block (1).md Mục 7.2)
+    q_lower = goal.question.lower()
+    obj = goal.objective or ""
+    if obj == "top_decliners" or any(w in q_lower for w in ["giảm nhiều nhất", "làm giảm", "sụt giảm", "kéo giảm"]):
+        comp_df = comp_df.sort_values(by="delta", ascending=True)
+    elif obj == "top_growers" or any(w in q_lower for w in ["tăng trưởng mạnh nhất", "tăng nhiều nhất"]):
+        comp_df = comp_df.sort_values(by="delta", ascending=False)
+    else:
+        comp_df["abs_delta"] = comp_df["delta"].abs()
+        comp_df = comp_df.sort_values(by="abs_delta", ascending=False)
+
     # Dong gop cua tung nhom
     fact_counter = 2
     for _, row in comp_df.iterrows():
         ent = str(row["entity"])
         d = float(row["delta"])
         pct = float(row["delta_pct"])
-        sh = float(row.get("share_of_change", 0.0))
-        act = "đóng góp tăng" if d >= 0 else "kéo giảm"
-        txt = f"{ent}: {act} {_fmt_num(d, force_sign=True)}{unit_str} ({_fmt_num(pct, 1, force_sign=True)}% so với kỳ trước)."
+        status = row.get("status", "existing")
+
+        if status == "new":
+            txt = f"{ent}: Nhóm mới xuất hiện trong kỳ, đóng góp +{_fmt_num(d)}{unit_str} vào tăng trưởng."
+        elif status == "discontinued":
+            txt = f"{ent}: Ngưng phát sinh trong kỳ này, kéo giảm {_fmt_num(d, force_sign=True)}{unit_str}."
+        else:
+            act = "đóng góp tăng" if d >= 0 else "kéo giảm"
+            txt = f"{ent}: {act} {_fmt_num(d, force_sign=True)}{unit_str} ({_fmt_num(pct, 1, force_sign=True)}% so với kỳ trước)."
+
         facts.append(
             Fact(
                 id=f"F{fact_counter}",
@@ -125,7 +152,7 @@ def run_diagnostic(
             caption=f"Mức thay đổi {n_window} kỳ gần nhất so với {n_window} kỳ liền trước.",
             display_name=metric_disp,
             unit=metric_unit,
-            role="supplementary",
+            role="primary" if obj == "contribution_to_change" else "supplementary",
         )
     )
 
@@ -138,9 +165,6 @@ def run_diagnostic(
             driver_row = match_t.iloc[0]
 
     if driver_row is None:
-        q_lower = goal.question.lower()
-        find_mode = primary_task.find if primary_task else None
-
         # Kiem tra neu cau hoi co nhac truc tiep den mot nhom nao do (vi du: "Đà Nẵng")
         for ent in comp_df["entity"]:
             if str(ent).lower() in q_lower:
@@ -150,15 +174,14 @@ def run_diagnostic(
                     break
 
     if driver_row is None:
-        q_lower = goal.question.lower()
         find_mode = primary_task.find if primary_task else None
-        if find_mode == "min" or any(w in q_lower for w in ["giảm", "sụt", "tụt", "kéo giảm"]):
+        if find_mode == "min" or obj == "top_decliners" or any(w in q_lower for w in ["giảm", "sụt", "tụt", "kéo giảm"]):
             driver_row = comp_df.sort_values(by="delta", ascending=True).iloc[0]
-        elif find_mode == "max" or "tăng" in q_lower:
+        elif find_mode == "max" or obj == "top_growers" or "tăng" in q_lower:
             driver_row = comp_df.sort_values(by="delta", ascending=False).iloc[0]
         else:
-            # Nhom co |delta| lon nhat
-            comp_df["abs_delta"] = comp_df["delta"].abs()
+            if "abs_delta" not in comp_df.columns:
+                comp_df["abs_delta"] = comp_df["delta"].abs()
             driver_row = comp_df.sort_values(by="abs_delta", ascending=False).iloc[0]
 
     driver_entity = str(driver_row["entity"])
@@ -190,10 +213,16 @@ def run_diagnostic(
         other_sub_sum = float(best_drill_df[best_drill_df["entity"] != sub_leader_name]["delta"].sum())
         other_sign = f"+{_fmt_num(other_sub_sum)}" if other_sub_sum >= 0 else _fmt_num(other_sub_sum)
 
+        act_word = "kéo giảm" if sub_leader_delta < 0 else "đóng góp tăng"
+        other_word = (
+            "bù lại" if (sub_leader_delta < 0 and other_sub_sum >= 0)
+            else ("cũng sụt giảm" if (sub_leader_delta < 0 and other_sub_sum < 0)
+            else ("kéo giảm lại" if other_sub_sum < 0 else "cũng tăng thêm"))
+        )
         sub_driver_text = (
             f"Bên trong {driver_entity}: {best_drill_col} '{sub_leader_name}' "
-            f"kéo giảm {_fmt_num(sub_leader_delta, force_sign=True)}{unit_str}; "
-            f"các danh mục khác bù lại {other_sign}{unit_str}."
+            f"{act_word} {_fmt_num(abs(sub_leader_delta))}{unit_str} ({_fmt_num(sub_leader_delta, force_sign=True)}{unit_str}); "
+            f"các danh mục khác {other_word} {other_sign}{unit_str}."
         )
         facts.append(
             Fact(

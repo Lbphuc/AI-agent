@@ -21,6 +21,7 @@ from typing import Callable
 import pandas as pd
 
 from ..schemas import AnalysisGoal, ChartSpec, DataProfile, TaskResult
+from .analytics.series import aggregation_policy
 from .business_terms import resolve_column_display
 
 logger = logging.getLogger(__name__)
@@ -221,13 +222,15 @@ def perspective_trend_by_group(ctx: PerspectiveContext) -> ChartSpec | None:
         time_span_days = (df_work["_dt"].max() - df_work["_dt"].min()).days if len(df_work) > 1 else 0
         n_unique_dates = df_work["_dt"].nunique()
 
+        agg_func, _ = aggregation_policy(ctx.primary_metric)
+
         # Nếu dữ liệu trải dài nhiều tháng (> 60 ngày) và nhiều mốc đơn lẻ (> 35), tự động gom nhóm theo Tháng
         if time_span_days > 60 and n_unique_dates > 35:
             df_work["_period"] = df_work["_dt"].dt.to_period("M").dt.to_timestamp()
             grouped = (
                 df_work
                 .groupby(["_period", ctx.group_col])[ctx.primary_metric]
-                .sum()
+                .agg(agg_func)
                 .unstack()
                 .sort_index()
             )
@@ -236,7 +239,7 @@ def perspective_trend_by_group(ctx: PerspectiveContext) -> ChartSpec | None:
             grouped = (
                 df_work
                 .groupby(["_dt", ctx.group_col])[ctx.primary_metric]
-                .sum()
+                .agg(agg_func)
                 .unstack()
                 .sort_index()
             )
@@ -393,11 +396,11 @@ def perspective_period_change(ctx: PerspectiveContext) -> ChartSpec | None:
         chart_type="bar",
         title=f"Biến động {metric_disp} so với kỳ trước (%)",
         x=x_out,
-        series={f"% Thay đổi": pct_changes},
+        series={"% Thay đổi": pct_changes},
         role="supplementary",
         perspective="period_change",
         caption=caption,
-        display_name=metric_disp,
+        display_name="% Thay đổi",
         unit="%",
     )
 
@@ -414,10 +417,14 @@ def perspective_contribution_to_change(ctx: PerspectiveContext) -> ChartSpec | N
         return None
 
     try:
+        agg_func, _ = aggregation_policy(ctx.primary_metric)
+        df_c = ctx.df_filtered.copy()
+        df_c["_dt"] = pd.to_datetime(df_c[ctx.time_col], errors="coerce")
+        df_c = df_c.dropna(subset=["_dt", ctx.primary_metric])
         grouped = (
-            ctx.df_filtered
-            .groupby([ctx.time_col, ctx.group_col])[ctx.primary_metric]
-            .sum()
+            df_c
+            .groupby(["_dt", ctx.group_col])[ctx.primary_metric]
+            .agg(agg_func)
             .unstack()
             .sort_index()
         )
@@ -466,7 +473,7 @@ def perspective_contribution_to_change(ctx: PerspectiveContext) -> ChartSpec | N
         role="supplementary",
         perspective="contribution_to_change",
         caption=caption,
-        display_name=metric_disp,
+        display_name=f"Thay đổi {metric_disp}",
         unit=metric_unit,
     )
 
@@ -581,8 +588,30 @@ def expand(
         return []
 
     candidates: list[tuple[int, ChartSpec]] = []
+    q_lower = goal.question.lower()
+    obj = goal.objective or ""
 
-    for priority, func in _PERSPECTIVES:
+    for base_priority, func in _PERSPECTIVES:
+        priority = base_priority
+
+        # Điều chỉnh độ ưu tiên động dựa theo mục tiêu câu hỏi (writing-block (1).md Mục 4.3 & 10.2)
+        if func == perspective_contribution_to_change:
+            if obj == "contribution_to_change" or any(w in q_lower for w in ["đóng góp", "dong gop", "thay đổi tổng", "thay doi tong"]):
+                priority = 150
+        elif func == perspective_period_change:
+            if obj in ("top_growers", "top_decliners") or any(w in q_lower for w in ["tăng trưởng", "kỳ trước", "biến động"]):
+                priority = 140
+        elif func == perspective_share_of_total:
+            if any(w in q_lower for w in ["cơ cấu", "tỷ trọng", "phần trăm", "chiếm"]):
+                priority = 130
+        elif func in (perspective_moving_average, perspective_cumulative):
+            # Nếu câu hỏi cụ thể về đóng góp hoặc tăng giảm, không sinh các biểu đồ phụ ít liên quan
+            if obj in ("contribution_to_change", "top_decliners", "top_growers"):
+                priority = -10
+
+        if priority < 0:
+            continue
+
         try:
             spec = func(ctx)
             if spec is not None:

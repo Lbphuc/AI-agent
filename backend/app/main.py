@@ -669,7 +669,7 @@ async def analyze(
     insight_result = None
     try:
         insight_result = await run_in_threadpool(
-            insight_generator.generate_insight, question, task_results, llm
+            insight_generator.generate_insight, question, task_results, llm, analysis_goal
         )
     except insight_generator.InsightGenerationError as exc:
         logger.warning("Khong sinh duoc insight: %s", exc)
@@ -957,23 +957,43 @@ def _generate_goal_summary(goal: AnalysisGoal) -> str:
     group_disp, _ = resolve_column_display(group_raw) if group_raw else ("", "")
 
     parts: list[str] = []
-    task_types = [t.type for t in goal.tasks]
-    if "comparison" in task_types:
-        action = f"So sánh {metric_disp.lower()}"
+    objective = getattr(goal, "objective", None)
+    if objective == "contribution_to_change":
+        action = f"Phân tích yếu tố đóng góp lớn nhất vào thay đổi {metric_disp.lower()}"
         if group_disp:
-            action += f" giữa các {group_disp.lower()}"
+            action += f" theo {group_disp.lower()}"
         parts.append(action)
-    elif "trend" in task_types:
-        action = f"Theo dõi xu hướng {metric_disp.lower()} theo thời gian"
-        if group_disp:
-            action += f" của các {group_disp.lower()}"
+    elif objective == "top_decliners":
+        action = f"Tìm {group_disp.lower() or 'nhóm'} làm giảm / sụt giảm {metric_disp.lower()} nhiều nhất"
         parts.append(action)
-    elif "growth_rate" in task_types:
-        find_mode = "giảm" if (first_task and first_task.find == "min") else "tăng"
-        action = f"Tìm {group_disp.lower() or 'nhóm'} {find_mode} mạnh nhất theo {metric_disp.lower()}"
+    elif objective == "top_growers":
+        action = f"Tìm {group_disp.lower() or 'nhóm'} tăng trưởng {metric_disp.lower()} mạnh nhất"
+        parts.append(action)
+    elif objective == "prescriptive_action":
+        action = f"Đề xuất phương án ưu tiên {group_disp.lower() if group_disp else 'nhóm'} để cải thiện {metric_disp.lower()}"
+        parts.append(action)
+    elif objective == "forecast":
+        horizon = getattr(goal, "forecast_horizon", None) or 3
+        action = f"Dự báo xu hướng {metric_disp.lower()} trong {horizon} kỳ tiếp theo"
         parts.append(action)
     else:
-        parts.append(f"Phân tích {metric_disp.lower()}")
+        task_types = [t.type for t in goal.tasks]
+        if "comparison" in task_types:
+            action = f"So sánh {metric_disp.lower()}"
+            if group_disp:
+                action += f" giữa các {group_disp.lower()}"
+            parts.append(action)
+        elif "trend" in task_types:
+            action = f"Theo dõi xu hướng {metric_disp.lower()} theo thời gian"
+            if group_disp:
+                action += f" của các {group_disp.lower()}"
+            parts.append(action)
+        elif "growth_rate" in task_types:
+            find_mode = "giảm" if (first_task and first_task.find == "min") else "tăng"
+            action = f"Tìm {group_disp.lower() or 'nhóm'} {find_mode} mạnh nhất theo {metric_disp.lower()}"
+            parts.append(action)
+        else:
+            parts.append(f"Phân tích {metric_disp.lower()}")
 
     target = getattr(goal, "target", None)
     if target:

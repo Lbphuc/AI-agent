@@ -47,11 +47,11 @@ def infer_frequency(df: pd.DataFrame, time_col: str) -> tuple[str, int]:
 
 
 def aggregation_policy(col_name: str) -> tuple[str, list[str]]:
-    """Xac dinh ham tong hop (sum vs mean) dua vao ten cot."""
+    """Xac dinh ham tong hop (sum vs mean) dua vao ten cot va ban chat nghiep vu."""
     clean = col_name.lower()
-    is_mean = bool(re.search(r"(ty_le|rate|pct|diem|rating|gia|price|percent|margin)", clean))
+    is_mean = bool(re.search(r"(ty_le|rate|pct|diem|rating|gia|price|percent|margin|ratio|tuoi|age|danh_gia)", clean))
     if is_mean:
-        return "mean", []
+        return "mean", ["Chỉ số trung bình/tỷ lệ được tổng hợp theo chính sách tính trung bình (mean)."]
     return "sum", ["Chỉ số được tổng hợp theo chính sách cộng dồn (sum)."]
 
 
@@ -114,7 +114,7 @@ def window_compare(
     """So sanh theo cua so: N ky gan nhat so voi N ky lien truoc.
 
     Tra ve DataFrame cac cot:
-        [entity, prev_val, curr_val, delta, delta_pct, share_of_change]
+        [entity, prev_val, curr_val, delta, delta_pct, share_of_change, status]
     """
     df_clean = df.copy()
     # Chuan hoa thoi gian
@@ -152,10 +152,24 @@ def window_compare(
             sub_curr = df_clean[(df_clean[group_col] == ent) & (df_clean["_time_key"].isin(curr_periods))]
             sub_prev = df_clean[(df_clean[group_col] == ent) & (df_clean["_time_key"].isin(prev_periods))]
 
-        c_val = float(sub_curr[metric_col].agg(agg_func)) if not sub_curr.empty else 0.0
-        p_val = float(sub_prev[metric_col].agg(agg_func)) if not sub_prev.empty else 0.0
+        has_curr = not sub_curr.empty
+        has_prev = not sub_prev.empty
+
+        c_val = float(sub_curr[metric_col].agg(agg_func)) if has_curr else 0.0
+        p_val = float(sub_prev[metric_col].agg(agg_func)) if has_prev else 0.0
         delta = c_val - p_val
-        delta_pct = (delta / p_val * 100.0) if abs(p_val) > 1e-6 else 0.0
+
+        status = "existing"
+        if not has_prev and has_curr:
+            status = "new"  # Nhóm mới xuất hiện
+            delta_pct = 100.0 if c_val > 0 else 0.0
+        elif has_prev and not has_curr:
+            status = "discontinued"  # Nhóm ngưng xuất hiện trong kỳ
+            delta_pct = -100.0
+        elif abs(p_val) > 1e-6:
+            delta_pct = delta / p_val * 100.0
+        else:
+            delta_pct = 0.0
 
         results.append({
             "entity": ent,
@@ -163,6 +177,7 @@ def window_compare(
             "curr_val": round(c_val, 1),
             "delta": round(delta, 1),
             "delta_pct": round(delta_pct, 1),
+            "status": status,
         })
 
     res_df = pd.DataFrame(results)
@@ -173,7 +188,12 @@ def window_compare(
         if abs(tot_delta) > 1.0:  # Thay doi tong khong qua gan 0
             res_df["share_of_change"] = np.round((res_df["delta"] / tot_delta) * 100.0, 1)
         else:
-            res_df["share_of_change"] = 0.0
+            # Cac nhom bu tru bien dong cho nhau
+            tot_abs = res_df["delta"].abs().sum()
+            if tot_abs > 1e-4:
+                res_df["share_of_change"] = np.round((res_df["delta"].abs() / tot_abs) * 100.0, 1)
+            else:
+                res_df["share_of_change"] = 0.0
     else:
         res_df["share_of_change"] = 100.0
 

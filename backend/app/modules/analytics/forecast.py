@@ -19,7 +19,7 @@ import pandas as pd
 from ...llm_client import LLMClient
 from ...schemas import AnalysisGoal, ChartSpec, DataProfile, Fact, InsightResult, Section
 from ..business_terms import resolve_column_display
-from .series import infer_frequency, prepare_regular_series
+from .series import infer_frequency, prepare_regular_series, aggregation_policy
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +159,9 @@ def run_backtest(
         if np.any(nonzero_mask):
             iter_mape = float(np.mean(abs_errs[nonzero_mask] / np.abs(y_test[nonzero_mask])) * 100.0)
             mape_list.append(iter_mape)
+        elif np.sum(np.abs(y_test)) > 1e-4:
+            iter_wape = float(np.sum(abs_errs) / np.sum(np.abs(y_test)) * 100.0)
+            mape_list.append(iter_wape)
 
     avg_mape = float(np.mean(mape_list)) if mape_list else 999.0
     return avg_mape, errors_by_step
@@ -188,9 +191,24 @@ def run_forecast(
     metric_disp, metric_unit = resolve_column_display(metric)
     unit_str = f" {metric_unit}" if metric_unit else ""
 
+    # Kiem tra neu cau hoi hoi rieng ve mot nhom cu the (vi du "Đà Nẵng", "Miền Bắc")
+    target_entity: Optional[str] = None
+    q_lower = goal.question.lower()
+    if group_col and group_col in df.columns:
+        for ent in df[group_col].dropna().unique():
+            if str(ent).lower() in q_lower:
+                target_entity = str(ent)
+                break
+
+    forecast_source_df = df
+    if target_entity is not None and group_col:
+        filtered_sub = df[df[group_col] == target_entity].copy()
+        if len(filtered_sub) >= 15:
+            forecast_source_df = filtered_sub
+
     # 1. Kiem tra Guard
-    _, cycle_len = infer_frequency(df, time_col)
-    series_df, prep_warns = prepare_regular_series(df, time_col, metric, group_col=None)
+    _, cycle_len = infer_frequency(forecast_source_df, time_col)
+    series_df, prep_warns = prepare_regular_series(forecast_source_df, time_col, metric, group_col=None)
     warnings.extend(prep_warns)
 
     # Tối ưu chuỗi thời gian: nếu chuỗi dạng ngày nhưng kéo dài nhiều tháng (> 90 ngày và > 45 điểm),
@@ -199,7 +217,8 @@ def run_forecast(
     if len(series_df) > 45 and pd.api.types.is_datetime64_any_dtype(series_df.index):
         span_days = (series_df.index.max() - series_df.index.min()).days
         if span_days > 90:
-            monthly_agg = series_df.resample("MS").sum()
+            agg_func, _ = aggregation_policy(metric)
+            monthly_agg = series_df.resample("MS").agg(agg_func)
             if len(monthly_agg) >= 15:
                 series_df = monthly_agg
                 cycle_len = 12
@@ -304,10 +323,19 @@ def run_forecast(
         f"Dải bất định 80% phản ánh sai số kiểm định thực tế."
     )
 
+    forecast_notes = [
+        f"Lịch sử huấn luyện: từ {x_total_dates[0]} đến {x_total_dates[-1]} ({len(x_total_dates)} {period_unit_name}).",
+        f"Kỳ dự báo tiếp nối: từ {future_dates[0]} đến {future_dates[-1]} ({h} {period_unit_name}).",
+        "Mô hình sử dụng toàn bộ chuỗi lịch sử sẵn có để huấn luyện các mẫu chu kỳ/xu hướng, sau đó dự báo tiếp nối các kỳ tương lai.",
+    ]
+    if not beats_baseline:
+        forecast_notes.append("Lưu ý: Mô hình có độ tin cậy thấp do không vượt qua baseline; giá trị dự báo chỉ mang tính tham khảo.")
+
+    chart_title = f"Dự báo xu hướng {metric_disp}{f' — {target_entity}' if target_entity else ''} ({h} {period_unit_name} tới)"
     charts.append(
         ChartSpec(
             chart_type="line",
-            title=f"Dự báo xu hướng {metric_disp} ({h} {period_unit_name} tới)",
+            title=chart_title,
             x=x_all,
             series={
                 "Thực tế": y_hist_with_nulls,
@@ -322,6 +350,7 @@ def run_forecast(
             display_name=metric_disp,
             unit=metric_unit,
             role="primary",
+            notes=forecast_notes,
         )
     )
 

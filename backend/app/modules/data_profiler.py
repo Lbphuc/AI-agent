@@ -122,6 +122,7 @@ def _clean(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = df.columns.str.strip()
     df = _drop_empty_unnamed_columns(df)
     df = df.dropna(axis=0, how="all").reset_index(drop=True)
+    df = df.drop_duplicates().reset_index(drop=True)
     df = _strip_string_columns(df)
     df = _convert_vn_formatted_numbers(df)
     return df
@@ -130,11 +131,8 @@ def _clean(df: pd.DataFrame) -> pd.DataFrame:
 def _guess_time_column(df: pd.DataFrame) -> str | None:
     """Đoán cột thời gian.
 
-    CHỈ thử ép kiểu datetime trên các cột dạng CHUỖI. Nếu thử trên cả
-    cột số, `pd.to_datetime()` có thể "ép" thành công các giá trị số
-    nhỏ không liên quan (ví dụ cột điểm đánh giá 1-5) thành mốc thời
-    gian sai lệch — đây là lỗi thực tế phát hiện khi kiểm thử với bộ
-    dữ liệu `danh_gia_khach_hang.csv` (xem backend/tests).
+    CHỈ thử ép kiểu datetime trên các cột dạng CHUỖI hoặc datetime có sẵn.
+    Nếu >= 80% giá trị hợp lệ là ngày tháng thì nhận diện là cột thời gian.
     """
     for col in df.columns:
         if pd.api.types.is_datetime64_any_dtype(df[col]):
@@ -144,8 +142,12 @@ def _guess_time_column(df: pd.DataFrame) -> str | None:
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", UserWarning)
-                pd.to_datetime(df[col], errors="raise")
-            return col
+                non_null = df[col].dropna()
+                if non_null.empty:
+                    continue
+                parsed = pd.to_datetime(non_null, errors="coerce")
+                if parsed.notna().mean() >= 0.8:
+                    return col
         except (ValueError, TypeError):
             continue
     return None

@@ -1,11 +1,12 @@
-import type { AnalyzeResponse, ExportSections } from "../api/types";
+import type { AnalyzeResponse, ExportSections, AnalysisLevel, DeepenResponse } from "../api/types";
 import type { ReportModel, ReportChartItem } from "./types";
 
 export function buildReportModel(
   response: AnalyzeResponse,
   filename: string,
   sections: ExportSections,
-  orgName?: string
+  orgName?: string,
+  deepenData?: Partial<Record<AnalysisLevel, DeepenResponse>>
 ): ReportModel {
   const meta = response.meta;
   const goal = response.goal;
@@ -27,7 +28,26 @@ export function buildReportModel(
   // Xây dựng danh sách biểu đồ kèm bảng dữ liệu
   const chartItems: ReportChartItem[] = [];
 
-  for (const chart of response.charts || []) {
+  const allCharts = [...(response.charts || [])];
+
+  // Bổ sung các biểu đồ từ Deepen (Diagnostic, Forecast...)
+  if (deepenData) {
+    Object.values(deepenData).forEach((d) => {
+      if (d?.sections) {
+        d.sections.forEach((s) => {
+          if (s.charts) {
+            s.charts.forEach((c) => {
+              if (!allCharts.some((existing) => existing.title === c.title)) {
+                allCharts.push(c);
+              }
+            });
+          }
+        });
+      }
+    });
+  }
+
+  for (const chart of allCharts) {
     const isPrimary = (chart.role || "primary") === "primary";
     if (isPrimary && sections.primary_chart === false) {
       continue;
@@ -60,7 +80,7 @@ export function buildReportModel(
 
     let calculationNote = "";
     if (chart.forecast_from || chart.band) {
-      calculationNote = "Ước tính dự báo chuỗi thời gian dựa trên mô hình định lượng và backtest.";
+      calculationNote = "Ước tính dự báo chuỗi thời gian dựa trên mô hình định lượng và backtest (khoảng tin cậy 80%).";
     } else if (chart.perspective === "share_of_total") {
       calculationNote = "Tỷ trọng (%) = (Giá trị từng nhóm / Tổng các nhóm) × 100.";
     } else if (chart.perspective === "period_change") {
@@ -95,20 +115,32 @@ export function buildReportModel(
     },
     { label: "Chỉ số đo lường", desc: metricName },
     { label: "Nhóm phân loại", desc: groupName },
+    { label: "Chính sách tổng hợp", desc: "Tổng hợp cộng dồn (sum) cho doanh thu/số lượng; trung bình (mean) cho tỷ lệ/đơn giá" },
     { label: "Công thức tỷ trọng", desc: "Tỷ trọng (%) = (Giá trị nhóm / Tổng) × 100" },
     { label: "Công thức biến động", desc: "% Thay đổi = ((Kỳ này − Kỳ trước) / Kỳ trước) × 100" },
-    { label: "Công thức đóng góp", desc: "Đóng góp tuyệt đối = Kỳ cuối − Kỳ đầu" },
+    { label: "Công thức đóng góp", desc: "Đóng góp tuyệt đối = Kỳ cuối − Kỳ đầu (so sánh theo cửa sổ N kỳ)" },
     { label: "Trung bình trượt", desc: "MA3 = Trung bình 3 kỳ liên tiếp (kỳ hiện tại và 2 kỳ trước)" },
   ];
 
+  const allWarnings: string[] = [];
   if (meta?.notes && meta.notes.length > 0) {
     meta.notes.forEach((note, i) => {
       calculationNotes.push({
         label: `Lưu ý bổ sung #${i + 1}`,
         desc: note,
       });
+      allWarnings.push(note);
     });
   }
+
+  // Lấy dữ liệu chuyên sâu từ deepenData
+  const diagData = deepenData?.diagnostic;
+  const fcData = deepenData?.forecast;
+  const presData = deepenData?.prescriptive;
+
+  if (diagData?.warnings) allWarnings.push(...diagData.warnings);
+  if (fcData?.warnings) allWarnings.push(...fcData.warnings);
+  if (presData?.warnings) allWarnings.push(...presData.warnings);
 
   return {
     title: "BÁO CÁO PHÂN TÍCH DỮ LIỆU KINH DOANH",
@@ -125,5 +157,11 @@ export function buildReportModel(
     charts: chartItems,
     calculationNotes: sections.calculation_notes !== false ? calculationNotes : [],
     sections,
+    diagnosticFacts: diagData?.facts,
+    diagnosticNarrative: diagData?.sections?.[0]?.narrative?.insight_text,
+    forecastFacts: fcData?.facts,
+    forecastNarrative: fcData?.sections?.[0]?.narrative?.insight_text,
+    recommendations: presData?.recommendations,
+    warnings: Array.from(new Set(allWarnings)),
   };
 }

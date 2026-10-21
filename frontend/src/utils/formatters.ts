@@ -53,20 +53,33 @@ export function formatAxisDate(label: string | number): string {
     return String(label);
   }
 
-  const ymMatch = label.match(/^(\d{4})[-/](\d{1,2})$/);
+  // Tách bỏ phần giờ nếu có dạng ISO timestamp (vd: 2026-01-30T00:00:00)
+  const cleanLabel = label.split("T")[0].trim();
+
+  // YYYY-MM
+  const ymMatch = cleanLabel.match(/^(\d{4})[-/](\d{1,2})$/);
   if (ymMatch) {
     const [, year, month] = ymMatch;
     const shortYear = year.slice(2);
     return `T${parseInt(month, 10)}/${shortYear}`;
   }
 
-  const ymdMatch = label.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  // YYYY-MM-DD
+  const ymdMatch = cleanLabel.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
   if (ymdMatch) {
     const [, , month, day] = ymdMatch;
     return `${parseInt(day, 10)}/${parseInt(month, 10)}`;
   }
 
-  return label;
+  // M/D/YYYY hoặc D/M/YYYY hoặc MM/DD/YYYY
+  const slashMatch = cleanLabel.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (slashMatch) {
+    const [, p1, p2, year] = slashMatch;
+    const shortYear = year.slice(2);
+    return `${p1}/${p2}/${shortYear}`;
+  }
+
+  return cleanLabel;
 }
 
 /**

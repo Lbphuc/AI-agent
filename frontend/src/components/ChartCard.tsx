@@ -543,6 +543,11 @@ function renderChartByType(
   chartType: ChartType,
   cardUid: string = "card"
 ) {
+  const hasNegative = data.some((d) =>
+    seriesKeys.some((k) => typeof d[k] === "number" && (d[k] as number) < 0)
+  );
+  const isSigned = isContribution || chart.perspective === "period_change" || (chart.unit === "%" && hasNegative) || hasNegative;
+
   // Biểu đồ Phân tán (Scatter)
   if (chartType === "scatter" || chart.data_shape === "points") {
     const scatterData = (chart.scatter_points && chart.scatter_points.length > 0)
@@ -794,9 +799,15 @@ function renderChartByType(
         margin={{ top: 12, right: 24, left: 32, bottom: 12 }}
       >
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-        <XAxis type="number" stroke="var(--text-secondary)" tickFormatter={(v) => formatNumber(v)} />
+        <XAxis
+          type="number"
+          stroke="var(--text-secondary)"
+          tickFormatter={(v) => (chart.unit === "%" ? formatPercent(v) : formatNumber(v))}
+          domain={isSigned ? [(dataMin: number) => Math.min(0, dataMin), (dataMax: number) => Math.max(0, dataMax)] : undefined}
+        />
         <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" width={85} />
-        <Tooltip content={<CustomChartTooltip unit={chart.unit} isContribution={isContribution} />} />
+        {isSigned && <ReferenceLine x={0} stroke="var(--border)" strokeWidth={1.5} />}
+        <Tooltip content={<CustomChartTooltip unit={chart.unit} isContribution={isContribution} isSigned={isSigned} />} />
         <Legend />
         {seriesKeys.map((k, sIdx) => {
           const isForecastKey = k.toLowerCase().includes("dự báo") || k.toLowerCase().includes("forecast");
@@ -807,7 +818,13 @@ function renderChartByType(
               name={chart.display_name && seriesKeys.length === 1 ? chart.display_name : k}
               fill={isForecastKey ? "var(--chart-2, #eab308)" : PALETTE[sIdx % PALETTE.length]}
               radius={[0, 4, 4, 0]}
-            />
+            >
+              {isSigned &&
+                data.map((entry, cIdx) => {
+                  const val = Number(entry[k] || 0);
+                  return <Cell key={cIdx} fill={val >= 0 ? "var(--pos)" : "var(--neg)"} />;
+                })}
+            </Bar>
           );
         })}
       </BarChart>
@@ -1177,9 +1194,13 @@ function renderChartByType(
         minTickGap={24}
         padding={{ left: 12, right: 12 }}
       />
-      <YAxis stroke="var(--text-secondary)" tickFormatter={(v) => formatNumber(v)} />
-      {isContribution && <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1.5} />}
-      <Tooltip content={<CustomChartTooltip unit={chart.unit} isContribution={isContribution} />} />
+      <YAxis
+        stroke="var(--text-secondary)"
+        tickFormatter={(v) => (chart.unit === "%" ? formatPercent(v) : formatNumber(v))}
+        domain={isSigned ? [(dataMin: number) => Math.min(0, dataMin), (dataMax: number) => Math.max(0, dataMax)] : undefined}
+      />
+      {isSigned && <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1.5} />}
+      <Tooltip content={<CustomChartTooltip unit={chart.unit} isContribution={isContribution} isSigned={isSigned} />} />
       <Legend />
       {seriesKeys.map((k, sIdx) => (
         <Bar
@@ -1189,7 +1210,7 @@ function renderChartByType(
           fill={PALETTE[sIdx % PALETTE.length]}
           radius={[4, 4, 0, 0]}
         >
-          {isContribution &&
+          {isSigned &&
             data.map((entry, cIdx) => {
               const val = Number(entry[k] || 0);
               return <Cell key={cIdx} fill={val >= 0 ? "var(--pos)" : "var(--neg)"} />;
@@ -1209,12 +1230,14 @@ function CustomChartTooltip({
   label,
   unit,
   isContribution,
+  isSigned,
 }: {
   active?: boolean;
   payload?: any[];
   label?: string;
   unit?: string | null;
   isContribution?: boolean;
+  isSigned?: boolean;
 }) {
   if (!active || !payload || !payload.length) return null;
 
@@ -1223,14 +1246,14 @@ function CustomChartTooltip({
 
   return (
     <div className="custom-chart-tooltip">
-      <div className="tooltip-title">{label}</div>
+      <div className="tooltip-title">{label ? formatAxisDate(label) : ""}</div>
       <div className="tooltip-items">
         {validPayload.map((item, idx) => {
           if (item.value === null || item.value === undefined) return null;
           const val = Number(item.value);
           let formattedValue = formatNumber(val);
 
-          if (isContribution) {
+          if (isContribution || isSigned) {
             const signed = formatSignedChange(val, unit || undefined);
             formattedValue = signed.text;
           } else if (unit === "%") {
@@ -1246,7 +1269,7 @@ function CustomChartTooltip({
               <span
                 className="tooltip-val"
                 style={{
-                  color: isContribution
+                  color: (isContribution || isSigned)
                     ? val >= 0
                       ? "var(--pos)"
                       : "var(--neg)"

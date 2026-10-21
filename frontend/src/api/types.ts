@@ -124,6 +124,14 @@ export interface AnalysisGoal {
   time_end: string | null;
   tasks: AnalysisTask[];
   levels?: AnalysisLevel[];
+  objective?: string | null;
+  metric?: string | null;
+  dimension?: string | null;
+  comparison_period?: string | null;
+  forecast_horizon?: number | null;
+  analysis_methods?: string[];
+  expected_outputs?: string[];
+  constraints?: string[];
 }
 
 export interface ExecutionResult {

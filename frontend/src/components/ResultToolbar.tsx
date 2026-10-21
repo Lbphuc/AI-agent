@@ -5,17 +5,25 @@ import "./ResultToolbar.css";
 interface ResultToolbarProps {
   chartCount: number;
   timeRangeStr?: string | null;
+  primaryMethod?: string | null;
   onOpenExport: () => void;
 }
 
 export const ResultToolbar: React.FC<ResultToolbarProps> = ({
   chartCount,
   timeRangeStr,
+  primaryMethod,
   onOpenExport,
 }) => {
   return (
     <div className="result-toolbar" role="toolbar" aria-label="Thanh công cụ kết quả">
       <div className="toolbar-summary">
+        {primaryMethod && (
+          <span className="badge-chip badge-primary-method" style={{ background: "rgba(59, 130, 246, 0.15)", color: "#38bdf8", borderColor: "rgba(59, 130, 246, 0.3)" }}>
+            <span style={{ fontWeight: 600 }}>Phương pháp:</span> {primaryMethod}
+          </span>
+        )}
+
         <span className="badge-chip">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="18" y1="20" x2="18" y2="10" />

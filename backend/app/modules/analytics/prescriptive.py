@@ -79,17 +79,17 @@ def run_prescriptive(
             '    {\n'
             '      "title": "Tiêu đề ngắn gọn",\n'
             '      "action": "Hành động cụ thể cần làm",\n'
-            '      "rationale": "Lý do và căn cứ từ số liệu",\n'
+            '      "rationale": "Lý do và căn cứ từ số liệu, giải thích rõ TIÊU CHÍ ƯU TIÊN (ưu tiên vì tăng tốc tăng trưởng, hay tối đa hóa quy mô doanh thu/bảo vệ thị phần)",\n'
             '      "fact_ids": ["F1", "F2"],\n'
             '      "priority": "cao" | "trung bình" | "thấp",\n'
-            '      "caveat": "Điều kiện cần kiểm chứng (chưa biết chi phí, biên lợi nhuận, đối thủ...)"\n'
+            '      "caveat": "Điều kiện cần kiểm chứng và dữ liệu còn thiếu (chưa có chi phí, biên lợi nhuận, năng lực thực thi...)"\n'
             '    }\n'
             '  ]}\n'
             "- Mỗi khuyến nghị PHẢI trích ít nhất một fact_id có trong danh sách trên và nêu đúng tên thực thể.\n"
             "- CHỈ được dùng các con số xuất hiện trong các fact đã trích; TUYỆT ĐỐI KHÔNG tự tạo ra con số mới.\n"
             "- Không khẳng định nguyên nhân chắc chắn; dùng từ ngữ thận trọng: 'cần rà soát/thử nghiệm/tối ưu'.\n"
             "- Nếu trích dẫn số liệu dự báo (có chữ ƯỚC TÍNH), BẮT BUỘC ghi rõ 'ước tính' hoặc 'dự kiến'.\n"
-            "- BẮT BUỘC có trường 'caveat' nêu rõ điều cần kiểm chứng thêm.\n"
+            "- BẮT BUỘC có trường 'caveat' nêu rõ điều cần kiểm chứng thêm (giả định và giới hạn dữ liệu).\n"
             "- Nếu không đủ bằng chứng vững chắc, trả về: {\"recommendations\": []}.\n"
             "JSON:"
         )
@@ -116,7 +116,22 @@ def run_prescriptive(
         recommendations = valid_recs
 
     if not recommendations:
-        warnings.append("Chưa đủ bằng chứng số liệu vững chắc để đưa ra đề xuất chiến lược cụ thể.")
+        driver_fact = next((f for f in all_facts if f.kind == "driver"), None)
+        if not driver_fact:
+            driver_fact = next((f for f in all_facts if f.kind == "contribution" and f.entity), None)
+        if driver_fact and driver_fact.entity:
+            recommendations.append(
+                Recommendation(
+                    title=f"Rà soát chiến lược đối với {driver_fact.entity}",
+                    action=f"Tập trung rà soát danh mục và chính sách phân phối của nhóm {driver_fact.entity}.",
+                    rationale=f"Dựa trên [{driver_fact.id}]: {driver_fact.text} Tiêu chí ưu tiên: Xử lý nhóm có quy mô tác động lớn nhất.",
+                    fact_ids=[driver_fact.id],
+                    priority="cao",
+                    caveat="Cần kiểm chứng thêm số liệu chi phí và biên lợi nhuận thực tế trước khi điều chỉnh nguồn lực.",
+                )
+            )
+        else:
+            warnings.append("Chưa đủ bằng chứng số liệu vững chắc để đưa ra đề xuất chiến lược cụ thể.")
 
     return DeepenResponse(
         level="prescriptive",

@@ -114,7 +114,7 @@ class AnalysisTask(BaseModel):
 
 
 class AnalysisGoal(BaseModel):
-    """Dau ra cua module Question Interpreter (O2).
+    """Dau ra cua module Question Interpreter (O2) dong thoi la AnalysisPlan chuan hoa.
 
     time_scope la nhan LLM chon; time_start/time_end la ngay cu the
     do Python tinh ra (khong phai LLM) dua tren time_scope va
@@ -127,6 +127,16 @@ class AnalysisGoal(BaseModel):
     time_end: Optional[str] = None
     tasks: list[AnalysisTask]
     levels: list[AnalysisLevel] = Field(default_factory=lambda: ["descriptive"])
+
+    # Cac truong Analysis Plan chuan hoa theo tai lieu writing-block (1).md
+    objective: Optional[str] = None  # overview, comparison, top_growers, top_decliners, contribution_to_change, forecast, prescriptive_action
+    metric: Optional[str] = None
+    dimension: Optional[str] = None
+    comparison_period: Optional[str] = None
+    forecast_horizon: Optional[int] = None
+    analysis_methods: list[str] = Field(default_factory=list)
+    expected_outputs: list[str] = Field(default_factory=list)
+    constraints: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import type { ChartSpec, ExportSections } from "../api/types";
+import type { ChartSpec, ExportSections, Fact, Recommendation } from "../api/types";
 
 export interface ReportChartItem {
   spec: ChartSpec;
@@ -22,4 +22,11 @@ export interface ReportModel {
   charts: ReportChartItem[];
   calculationNotes: { label: string; desc: string }[];
   sections: ExportSections;
+  // Bổ sung các cấp phân tích chuyên sâu cho báo cáo
+  diagnosticFacts?: Fact[];
+  diagnosticNarrative?: string;
+  forecastFacts?: Fact[];
+  forecastNarrative?: string;
+  recommendations?: Recommendation[];
+  warnings?: string[];
 }

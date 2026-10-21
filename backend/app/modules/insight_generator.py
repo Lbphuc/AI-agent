@@ -26,7 +26,7 @@ import logging
 import re
 
 from ..llm_client import LLMClient
-from ..schemas import InsightResult, TaskResult
+from ..schemas import AnalysisGoal, InsightResult, TaskResult
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +79,27 @@ def _format_task_result(tr: TaskResult) -> str:
 # Helper: xay prompt
 # ---------------------------------------------------------------------------
 
-def _build_prompt(question: str, task_results: list[TaskResult]) -> str:
+def _build_prompt(question: str, task_results: list[TaskResult], goal: AnalysisGoal | None = None) -> str:
     """Xay prompt gui LLM — chi chua so lieu da tinh, khong chua DataFrame."""
     data_blocks = "\n\n".join(_format_task_result(tr) for tr in task_results)
+
+    goal_guidance = ""
+    if goal and goal.objective == "contribution_to_change":
+        goal_guidance = (
+            "\nLƯU Ý CỰC KỲ QUAN TRỌNG VỀ MỤC TIÊU CÂU HỎI:\n"
+            "- Câu hỏi hỏi về yếu tố đóng góp vào THAY ĐỔI / BIẾN ĐỘNG doanh số (thuộc phần Chẩn đoán bên dưới).\n"
+            "- Các số liệu ở đây chỉ là tổng quy mô doanh số tĩnh để làm bối cảnh tham khảo ban đầu.\n"
+            "- TUYỆT ĐỐI KHÔNG nhận định nhóm có quy mô doanh số lớn nhất là 'đóng góp nhiều nhất vào thay đổi'!\n"
+            "- Hãy nêu rõ: Đây là tổng quy mô doanh số theo danh mục làm cơ sở nền tảng, còn mức độ đóng góp làm tăng/giảm doanh số cụ thể được phân tích chi tiết trong phần Chẩn đoán bên dưới.\n"
+        )
+    elif goal and goal.objective in ("top_decliners", "top_growers"):
+        goal_guidance = (
+            "\nLƯU Ý VỀ MỤC TIÊU CÂU HỎI:\n"
+            "- Người dùng đang tìm nhóm tăng trưởng hoặc sụt giảm mạnh nhất. "
+            "Nếu số liệu ở đây là so sánh quy mô, hãy nêu rõ đây là bối cảnh tổng quan, "
+            "còn tỷ lệ tăng trưởng và mức thay đổi sẽ được phân tích ở phần Chẩn đoán.\n"
+        )
+
     return (
         "Ban la mot chuyen gia phan tich du lieu kinh doanh. Duoi day la\n"
         "cau hoi cua nguoi dung va so lieu DA DUOC TINH SAN chinh xac bang\n"
@@ -90,13 +108,13 @@ def _build_prompt(question: str, task_results: list[TaskResult]) -> str:
         "con so khac.\n\n"
         f"Cau hoi: \"{question}\"\n\n"
         f"So lieu da tinh:\n{data_blocks}\n\n"
+        f"{goal_guidance}"
         "QUY TAC VIET NHAN XET:\n"
         "1. Viet mot doan nhan xet ngan gon (2-4 cau), bang tieng Viet tu nhien.\n"
-        "2. Neu cau hoi hoi ve tuong lai / du bao / nguyen nhan / de xuat: Hay tap trung tom tat\n"
-        "   cac dac diem, moc bien dong, dinh/day hoac xu huong trong du lieu lich su da tinh tren\n"
-        "   de lam co so nen tang. TUYET DOI KHONG tu choi tra loi hoac tuyen bo rang 'he thong khong the\n"
-        "   du bao / khong the suy dien' (vi phan mo hinh du bao va phan tich chuyen sau se duoc cac\n"
-        "   module chuyen biet hien thi rieng ben duoi).\n"
+        "2. Neu cau hoi hoi ve tuong lai / du bao / nguyen nhan / de xuat / dong gop: Hay tap trung tom tat\n"
+        "   quy mo tong the va cac moc bien dong trong du lieu da tinh tren de lam co so nen tang.\n"
+        "   TUYET DOI KHONG tu choi tra loi hoac tuyen bo rang 'he thong khong the du bao' (vi phan\n"
+        "   chuyen sau se duoc cac module chuyen biet hien thi rieng ben duoi).\n"
         "3. Giu nguyen chinh xac ten nhom/nhan nhu trong so lieu, khong them dau hay doi cach viet so voi du lieu goc.\n"
         "4. Neu co nhieu phan so lieu, hay ket hop chung mot cach mach lac. Chi tra ve doan van, khong them tieu de\n"
         "   hay markdown."
@@ -180,6 +198,7 @@ def generate_insight(
     question: str,
     task_results: list[TaskResult],
     llm: LLMClient,
+    goal: AnalysisGoal | None = None,
 ) -> InsightResult:
     """Sinh nhan xet ngon ngu tu nhien tu so lieu da tinh.
 
@@ -191,6 +210,7 @@ def generate_insight(
         question: cau hoi goc cua nguoi dung (nguyen van).
         task_results: ket qua tung task tu orchestrator.
         llm: LLMClient thuc (GeminiClient/ClaudeClient) hoac gia lap (test).
+        goal: AnalysisGoal neu co — giup dinh huong nhan xet khong lech muc tieu.
 
     Returns:
         InsightResult voi insight_text va confidence_score heuristic.
@@ -213,7 +233,7 @@ def generate_insight(
             len(successful),
         )
 
-    prompt = _build_prompt(question, successful)
+    prompt = _build_prompt(question, successful, goal)
     insight_text = llm.complete_text(prompt)
 
     confidence = _numeric_accuracy_score(insight_text, successful)

@@ -20,7 +20,11 @@ function computeGridSpans(charts: ChartSpec[]): number[] {
     if (
       c.perspective === "trend_by_group" ||
       c.perspective === "cumulative" ||
-      c.perspective === "moving_average"
+      c.perspective === "moving_average" ||
+      c.chart_type === "heatmap" ||
+      c.data_shape === "matrix" ||
+      (c.chart_type === "waterfall" && (c.waterfall_steps?.length || 0) > 6) ||
+      ((c.chart_type === "line" || c.chart_type === "area") && (c.x?.length || 0) > 10)
     ) {
       return 12;
     }
