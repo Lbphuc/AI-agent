@@ -76,12 +76,11 @@ def _build_prompt(question: str, task_results: list[TaskResult], goal: AnalysisG
         "QUY TAC VIET NHAN XET:\n"
         "1. Viet mot doan nhan xet ngan gon (2-4 cau), bang tieng Viet tu nhien.\n"
         "2. Neu cau hoi hoi ve tuong lai / du bao / nguyen nhan / de xuat / dong gop: Hay tap trung tom tat\n"
-        "   quy mo tong the va cac moc bien dong chinh (thang cao nhat, thang thap nhat) trong du lieu da tinh tren de lam co so nen tang.\n"
-        "   TUYET DOI KHONG tu choi tra loi hoac tuyen bo rang 'he thong khong the du bao' (vi phan\n"
-        "   chuyen sau se duoc cac module chuyen biet hien thi rieng ben duoi).\n"
+        "   quy mo tong the va cac moc bien dong chinh (ky cao nhat, ky thap nhat, ky dau, ky cuoi) trong du lieu da tinh tren de lam co so nen tang.\n"
+        "   TUYET DOI KHONG tu choi tra loi hoac tuyen bo rang 'he thong khong the du bao'.\n"
         "3. Giu nguyen chinh xac ten nhom/nhan nhu trong so lieu, khong them dau hay doi cach viet so voi du lieu goc.\n"
-        "4. Chi trich dan dung cac con so co trong bang so lieu tren, khong tu uoc luong so tron (nhu 'duoi 100').\n"
-        "5. Chi tra ve doan van, khong them tieu de hay markdown."
+        "4. CHI trich dan DUNG CON SO CHINH XAC co trong bang so lieu tren, TUYET DOI KHONG tu lam tron hoac viet so uoc luong nhu 'hon 40000', 'tren 80000', 'duoi 100'.\n"
+        "5. Chi tra ve doan van thuan tuy, khong them tieu de hay markdown."
     )
 
 
@@ -124,10 +123,12 @@ def _collect_known_values(task_results: list[TaskResult]) -> set[float]:
     return known
 
 
-_DATE_TOKEN_PATTERN = re.compile(
-    r"(?:năm\s+20\d{2}|tháng\s+\d{1,2}(?:\s*/\s*20\d{2})?|quý\s+[1-4](?:\s*/\s*20\d{2})?|"
-    r"\b20\d{2}[-/]\d{1,2}(?:[-/]\d{1,2})?\b|\b\d{1,2}/\d{1,2}/20\d{2}\b|"
-    r"\b\d{1,2}\s+(?:tháng|kỳ|quý|năm|nhóm|chi nhánh|danh mục)\b)",
+_IGNORE_TOKEN_PATTERN = re.compile(
+    r"(?:\b20\d{2}[-/]\d{1,2}(?:[-/]\d{1,2})?\b|\b\d{1,2}/\d{1,2}/20\d{2}\b|"
+    r"(?:năm|tháng|kỳ|quý)\s+20\d{2}(?:[-/]\d{1,2})?\b|"
+    r"(?:tháng|quý)\s+\d{1,2}(?:\s*[/\-]\s*20\d{2})?\b|"
+    r"\b\d{1,2}\s+(?:tháng|kỳ|quý|năm|nhóm|chi nhánh|danh mục)\b|"
+    r"(?:hơn|trên|dưới|khoảng|xấp xỉ|gần|ngưỡng(?:\s+trên|\s+dưới)?|mức\s+hơn|mức\s+trên|mức\s+dưới)\s+[-+]?\d+(?:[.,]\d+)*)",
     re.IGNORECASE,
 )
 
@@ -138,11 +139,11 @@ def _numeric_accuracy_score(
     tolerance: float = 0.5,
 ) -> float:
     """Tinh ti le so trong insight khop voi so lieu that (heuristic).
-    Bo qua cac con so chi ngay thang / nam / so ky (vd: 'nam 2017', 'thang 12', '2025-09')
-    de tranh canh bao gia.
+    Bo qua cac con so chi ngay thang / nam / so ky va cac cum uoc luong tron ('hon 40000', 'tren 80000')
+    de tranh canh bao gia khi cac con so chinh xac da khop 100%.
     """
     known = _collect_known_values(task_results)
-    cleaned_text = _DATE_TOKEN_PATTERN.sub(" ", insight_text)
+    cleaned_text = _IGNORE_TOKEN_PATTERN.sub(" ", insight_text)
     mentioned = _extract_numbers(cleaned_text)
     if not known or not mentioned:
         return 1.0
@@ -181,7 +182,7 @@ def generate_insight(
         )
 
     prompt = _build_prompt(question, successful, goal)
-    insight_text = llm.complete_text(prompt)
+    insight_text = llm.complete_text(prompt).replace("**", "")
 
     confidence = _numeric_accuracy_score(insight_text, successful)
     logger.info("Insight confidence_score=%.2f", confidence)

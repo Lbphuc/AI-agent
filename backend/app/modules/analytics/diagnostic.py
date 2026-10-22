@@ -50,6 +50,29 @@ def _pick_diagnostic_group_col(goal: AnalysisGoal, profile: DataProfile, df: pd.
     return profile.group_columns[0]
 
 
+def _drill_col_priority(col_name: str, parent_group_col: Optional[str], n_uniq: int) -> tuple[int, int]:
+    """Xếp hạng độ ưu tiên cho cột drill-down thứ 2 bên trong nhóm dẫn dắt (driver):
+    - Nếu nhóm cha là Category / Danh_muc -> ưu tiên số 1 cho Sub-Category / San_pham (bóc tách mặt hàng con).
+    - Tiếp theo là các chiều kinh doanh cốt lõi: Danh_muc, Category, Region, Khu_vuc, Chi_nhanh, Segment, Phan_khuc.
+    - Để các chiều vận chuyển / địa lý hành chính (Ship Mode, Country, State) ở cuối cùng.
+    """
+    c_low = col_name.lower()
+    p_low = (parent_group_col or "").lower()
+
+    if ("category" in p_low or "danh_muc" in p_low) and ("sub" in c_low or "san_pham" in c_low or "product" in c_low):
+        tier = 4
+    elif any(k in c_low for k in ("danh_muc", "category", "sub-category", "san_pham", "product", "chi_nhanh", "branch", "region", "khu_vuc", "segment", "phan_khuc")):
+        tier = 3
+    elif any(k in c_low for k in ("ship", "country", "postal", "state", "city")):
+        tier = 1
+    else:
+        tier = 2
+
+    # Ưu tiên số lượng nhóm con từ 3 đến 10 để biểu đồ drill-down trực quan, không quá thưa hoặc quá dày
+    ideal_count_score = 15 - abs(n_uniq - 6)
+    return (tier, ideal_count_score)
+
+
 def run_diagnostic(
     df: pd.DataFrame,
     profile: DataProfile,
@@ -160,10 +183,10 @@ def run_diagnostic(
         x=x_contrib,
         series={f"Thay đổi {metric_disp}": y_contrib},
         caption=f"Mức thay đổi {n_window} kỳ gần nhất so với {n_window} kỳ liền trước.",
-        display_name=metric_disp,
+        display_name=f"Thay đổi {metric_disp}",
         unit=metric_unit,
         perspective="contribution_to_change",
-        role="primary" if obj == "contribution_to_change" else "supplementary",
+        role="primary",
     )
     charts.append(enrich_chart_spec(contrib_chart))
 
@@ -197,7 +220,17 @@ def run_diagnostic(
     driver_entity = str(driver_row["entity"])
     driver_delta = float(driver_row["delta"])
 
-    other_group_cols = [c for c in profile.group_columns if c != group_col and 2 <= df[c].nunique() <= 20]
+    # Sắp xếp các cột nhóm ứng viên để drill-down theo đúng thứ bậc nghiệp vụ (ví dụ Category -> Sub-Category / Region, không lấy Ship Mode trước)
+    candidate_drill_cols = []
+    for c in profile.group_columns:
+        if c != group_col and c in df.columns:
+            n_u = int(df[c].nunique())
+            if 2 <= n_u <= 20:
+                prio = _drill_col_priority(c, group_col, n_u)
+                candidate_drill_cols.append((prio, c))
+    candidate_drill_cols.sort(key=lambda item: item[0], reverse=True)
+    other_group_cols = [c for _, c in candidate_drill_cols]
+
     best_drill_col = None
     best_drill_df = None
 
@@ -205,7 +238,7 @@ def run_diagnostic(
         sub_df = df[df[group_col] == driver_entity]
         for c2 in other_group_cols:
             drill_res = window_compare(sub_df, c2, metric, time_col, n=n_window)
-            if not drill_res.empty:
+            if not drill_res.empty and len(drill_res) >= 2:
                 best_drill_col = c2
                 best_drill_df = drill_res
                 break
@@ -246,14 +279,20 @@ def run_diagnostic(
         )
         fact_counter += 1
 
+        # Nếu có quá nhiều nhóm con (> 8, ví dụ Sub-Category có 9-12 mục), lấy 8 mục biến động lớn nhất và vẽ cột ngang cho dễ đọc
+        plot_drill_df = best_drill_df.copy()
+        if len(plot_drill_df) > 8:
+            plot_drill_df["_abs_d"] = plot_drill_df["delta"].abs()
+            plot_drill_df = plot_drill_df.sort_values(by="_abs_d", ascending=False).head(8).sort_values(by="delta", ascending=True)
         drill_disp, _ = resolve_column_display(best_drill_col)
+        drill_chart_type = "bar_horizontal" if len(plot_drill_df) > 6 else "bar"
         drill_chart = ChartSpec(
-            chart_type="bar",
+            chart_type=drill_chart_type,
             title=f"Bóc tách thay đổi bên trong {driver_entity} theo {drill_disp}",
-            x=best_drill_df["entity"].tolist(),
-            series={f"Thay đổi {metric_disp}": [float(v) for v in best_drill_df["delta"].tolist()]},
+            x=plot_drill_df["entity"].tolist(),
+            series={f"Thay đổi {metric_disp}": [float(v) for v in plot_drill_df["delta"].tolist()]},
             caption=f"{sub_leader_name} là yếu tố tác động mạnh nhất trong {driver_entity}.",
-            display_name=metric_disp,
+            display_name=f"Thay đổi {metric_disp}",
             unit=metric_unit,
             perspective="contribution_to_change",
             role="supplementary",
@@ -342,7 +381,7 @@ def _generate_diagnostic_narrative(facts: list[Fact], llm: Optional[LLMClient]) 
         + "\n".join(f"[{f.id}] {f.text}" for f in facts)
         + "\n\n"
         "Yêu cầu:\n"
-        "- Viết một đoạn nhận xét chẩn đoán ngắn gọn (3–5 câu) giải thích yếu tố nào đóng góp chính vào thay đổi.\n"
+        "- Viết một đoạn nhận xét chẩn đoán ngắn gọn (3–5 câu) bằng văn bản thuần túy (KHÔNG dùng dấu ** hay markdown) giải thích yếu tố nào đóng góp chính vào thay đổi.\n"
         "- BẮT BUỘC chỉ dùng các con số và đối tượng có trong danh sách sự thật trên.\n"
         "- KHÔNG tự bịa con số mới.\n"
         "- CẤM dùng từ khẳng định nguyên nhân tuyệt đối ('chắc chắn do', 'nguyên nhân chính là'); "
@@ -351,7 +390,7 @@ def _generate_diagnostic_narrative(facts: list[Fact], llm: Optional[LLMClient]) 
     )
 
     try:
-        text = llm.complete_text(prompt).strip()
+        text = llm.complete_text(prompt).strip().replace("**", "")
         return text if text else fallback_text
     except Exception as exc:
         logger.warning("LLM dien giai chan doan loi, dung fallback tat dinh: %s", exc)

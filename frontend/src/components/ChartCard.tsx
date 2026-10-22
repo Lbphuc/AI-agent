@@ -20,23 +20,180 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
-import type { ChartSpec, ChartOption, ChartType, WaterfallStep } from "../api/types";
-import { formatNumber, formatPercent, formatAxisDate, formatSignedChange } from "../utils/formatters";
-import { exportChartToPng } from "../export/exportPng";
-import { downloadCsv } from "../export/buildCsv";
-import { CHART_NAMES } from "./ChartTypePicker";
-import "./ChartCard.css";
 
-// 8 màu chuỗi Okabe–Ito
+export type ChartType =
+  | "bar"
+  | "bar_horizontal"
+  | "stacked_bar"
+  | "line"
+  | "area"
+  | "pie"
+  | "waterfall"
+  | "scatter"
+  | "histogram"
+  | "heatmap"
+  | "box"
+  | "kpi";
+
+export interface Reason {
+  code: string;
+  severity: "block" | "confirm" | "info";
+  message: string;
+}
+
+export interface ChartOption {
+  chart_type: ChartType;
+  verdict: "recommended" | "ok" | "confirm" | "blocked";
+  reasons?: Reason[];
+  requires_fetch?: boolean;
+}
+
+export interface WaterfallStep {
+  label?: string;
+  name?: string;
+  delta?: number;
+  value?: number;
+  is_total?: boolean;
+}
+
+export interface ChartSpec {
+  chart_type: ChartType;
+  title: string;
+  x?: string[];
+  series: Record<string, (number | null)[]>;
+  caption?: string | null;
+  display_name?: string | null;
+  unit?: string | null;
+  perspective?: string | null;
+  role?: "primary" | "supplementary" | string | null;
+  selection?: "auto" | "user" | string | null;
+  data_shape?: string | null;
+  notes?: string[];
+  options?: ChartOption[];
+  forecast_from?: string | null;
+  band?: {
+    lower: (number | null)[];
+    upper: (number | null)[];
+  } | null;
+  highlight_series?: string | null;
+  kpi_value?: number | null;
+  kpi_delta?: number | null;
+  kpi_delta_percent?: number | null;
+  kpi_delta_pct?: number | null;
+  kpi_period?: string | null;
+  heatmap_matrix?: {
+    x_labels: string[];
+    y_labels: string[];
+    cells: { x: string; y: string; value: number; intensity?: number }[];
+    min?: number;
+    max?: number;
+  } | null;
+  box_data?: {
+    name: string;
+    min: number;
+    q1: number;
+    median: number;
+    q3: number;
+    max: number;
+  }[] | null;
+  scatter_points?: { name?: string; x: number; y: number }[] | null;
+  histogram_bins?: {
+    label: string;
+    bin_start: number;
+    bin_end: number;
+    count: number;
+    percent?: number;
+  }[] | null;
+  waterfall_steps?: WaterfallStep[] | null;
+}
+
+export const CHART_NAMES: Record<string, string> = {
+  bar: "Biểu đồ cột dọc",
+  bar_horizontal: "Biểu đồ thanh ngang",
+  stacked_bar: "Biểu đồ cột chồng",
+  line: "Biểu đồ đường",
+  area: "Biểu đồ miền",
+  pie: "Biểu đồ tròn / Donut",
+  waterfall: "Biểu đồ thác nước",
+  scatter: "Biểu đồ phân tán",
+  histogram: "Biểu đồ tần suất",
+  heatmap: "Bản đồ nhiệt",
+  box: "Biểu đồ hộp (Box plot)",
+  kpi: "Thẻ chỉ số KPI",
+};
+
+function formatNumber(val: number | string | null | undefined, opts?: { decimals?: number }): string {
+  if (val === null || val === undefined || val === "") return "0";
+  const num = Number(val);
+  if (isNaN(num)) return String(val);
+  const dec = opts?.decimals !== undefined ? opts.decimals : Number.isInteger(num) ? 0 : 1;
+  return num.toLocaleString("vi-VN", {
+    minimumFractionDigits: opts?.decimals !== undefined ? opts.decimals : 0,
+    maximumFractionDigits: dec,
+  });
+}
+
+function formatPercent(val: number | string | null | undefined, decimals = 1): string {
+  if (val === null || val === undefined || val === "") return "0%";
+  const num = Number(val);
+  if (isNaN(num)) return String(val);
+  return `${num.toLocaleString("vi-VN", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })}%`;
+}
+
+function formatAxisDate(val: any): string {
+  const s = String(val ?? "");
+  const m = s.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
+  if (m) {
+    return `T${parseInt(m[2], 10)}/${m[1].slice(2)}`;
+  }
+  return s;
+}
+
+function formatSignedChange(val: number, unit?: string): { text: string; isPos: boolean } {
+  const sign = val > 0 ? "+" : val < 0 ? "−" : "";
+  const absFormatted = formatNumber(Math.abs(val), { decimals: unit === "%" ? 2 : 1 });
+  const suffix = unit ? (unit === "%" ? "%" : ` ${unit}`) : "";
+  return {
+    text: `${sign}${absFormatted}${suffix}`,
+    isPos: val >= 0,
+  };
+}
+
+function downloadCsv(chart: ChartSpec, filename: string) {
+  const seriesKeys = Object.keys(chart.series || {});
+  const headers = ["Nhãn", ...seriesKeys];
+  const rows = (chart.x || []).map((xVal, idx) => {
+    const cells = [
+      `"${String(xVal).replace(/"/g, '""')}"`,
+      ...seriesKeys.map((k) => {
+        const v = chart.series[k]?.[idx];
+        return v !== null && v !== undefined ? String(v) : "";
+      }),
+    ];
+    return cells.join(",");
+  });
+  const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 const PALETTE = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-  "var(--chart-6)",
-  "var(--chart-7)",
-  "var(--chart-8)",
+  "var(--chart-1, #56B4E9)",
+  "var(--chart-2, #E69F00)",
+  "var(--chart-3, #2BC4A0)",
+  "var(--chart-4, #CC79A7)",
+  "var(--chart-5, #F0E442)",
+  "var(--chart-6, #7C9CFF)",
+  "var(--chart-7, #E07B54)",
+  "var(--chart-8, #B0B8C8)",
 ];
 
 const HEX_PALETTE = [
@@ -96,9 +253,17 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, onSwitchChart, onRe
     setIsExportingPng(true);
     setMenuOpen(false);
     try {
-      await exportChartToPng(cardRef.current, currentChart.title);
-    } catch {
-      alert("Không thể xuất ảnh PNG. Vui lòng thử lại.");
+      const svgEl = cardRef.current.querySelector("svg");
+      if (svgEl) {
+        const svgData = new XMLSerializer().serializeToString(svgEl);
+        const blob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${currentChart.title.replace(/\s+/g, "_")}.svg`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
     } finally {
       setIsExportingPng(false);
     }
@@ -181,7 +346,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, onSwitchChart, onRe
                   <circle cx="8.5" cy="8.5" r="1.5" />
                   <polyline points="21 15 16 10 5 21" />
                 </svg>
-                {isExportingPng ? "Đang xuất ảnh..." : "Tải ảnh PNG"}
+                {isExportingPng ? "Đang xuất ảnh..." : "Tải ảnh biểu đồ"}
               </button>
               <button className="dropdown-item" onClick={handleExportCsv}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -200,8 +365,8 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, onSwitchChart, onRe
                     const isBlocked = opt.verdict === "blocked";
                     const badgeSymbol =
                       opt.verdict === "recommended" ? "★" :
-                      opt.verdict === "ok" ? "○" :
-                      opt.verdict === "confirm" ? "⚠" : "✕";
+                        opt.verdict === "ok" ? "○" :
+                          opt.verdict === "confirm" ? "⚠" : "✕";
                     return (
                       <button
                         key={opt.chart_type}
@@ -400,9 +565,9 @@ function renderHeatmap(chart: ChartSpec, seriesKeys: string[]) {
           style={
             hasNegative
               ? {
-                  background:
-                    "linear-gradient(to right, rgba(239, 68, 68, 0.85), rgba(239, 68, 68, 0.2), rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.85))",
-                }
+                background:
+                  "linear-gradient(to right, rgba(239, 68, 68, 0.85), rgba(239, 68, 68, 0.2), rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.85))",
+              }
               : undefined
           }
         />
@@ -532,11 +697,11 @@ function renderChartByType(
     const scatterData = (chart.scatter_points && chart.scatter_points.length > 0)
       ? chart.scatter_points
       : (chart.x || []).map((name, i) => {
-          const yVal = Number(chart.series[seriesKeys[0]]?.[i] ?? 0);
-          const parsedX = parseFloat(name);
-          const xVal = !isNaN(parsedX) ? parsedX : (i + 1);
-          return { name, x: xVal, y: yVal };
-        });
+        const yVal = Number(chart.series[seriesKeys[0]]?.[i] ?? 0);
+        const parsedX = parseFloat(name);
+        const xVal = !isNaN(parsedX) ? parsedX : (i + 1);
+        return { name, x: xVal, y: yVal };
+      });
 
     return (
       <ScatterChart
@@ -583,7 +748,7 @@ function renderChartByType(
         <Scatter
           name={chart.display_name || "Điểm quan sát"}
           data={scatterData}
-          fill="var(--chart-1)"
+          fill="var(--chart-1, #56B4E9)"
         />
       </ScatterChart>
     );
@@ -601,12 +766,12 @@ function renderChartByType(
     const bins = (chart.histogram_bins && chart.histogram_bins.length > 0)
       ? chart.histogram_bins
       : (chart.x || []).map((cat, i) => ({
-          label: cat,
-          bin_start: i,
-          bin_end: i + 1,
-          count: Number(chart.series[seriesKeys[0]]?.[i] ?? 0),
-          percent: 10,
-        }));
+        label: cat,
+        bin_start: i,
+        bin_end: i + 1,
+        count: Number(chart.series[seriesKeys[0]]?.[i] ?? 0),
+        percent: 10,
+      }));
 
     return (
       <BarChart
@@ -637,7 +802,7 @@ function renderChartByType(
                 <div className="tooltip-title">Khoảng: {item.label}</div>
                 <div className="tooltip-items">
                   <div className="tooltip-item">
-                    <span className="tooltip-dot" style={{ backgroundColor: "var(--chart-1)" }} />
+                    <span className="tooltip-dot" style={{ backgroundColor: "var(--chart-1, #56B4E9)" }} />
                     <span className="tooltip-name">Tần suất xuất hiện:</span>
                     <span className="tooltip-val">{formatNumber(item.count)} lần</span>
                   </div>
@@ -655,7 +820,7 @@ function renderChartByType(
         <Bar
           dataKey="count"
           name="Tần suất quan sát"
-          fill="var(--chart-1)"
+          fill="var(--chart-1, #56B4E9)"
           radius={[2, 2, 0, 0]}
         />
       </BarChart>
@@ -666,25 +831,25 @@ function renderChartByType(
     const steps: WaterfallStep[] = (chart.waterfall_steps && chart.waterfall_steps.length > 0)
       ? chart.waterfall_steps
       : (chart.x || []).map((name, i) => ({
-          label: name,
-          name: name,
-          delta: Number(chart.series[seriesKeys[0]]?.[i] ?? 0),
-          value: Number(chart.series[seriesKeys[0]]?.[i] ?? 0),
-          is_total: i === 0 || i === (chart.x || []).length - 1,
-        }));
+        label: name,
+        name: name,
+        delta: Number(chart.series[seriesKeys[0]]?.[i] ?? 0),
+        value: Number(chart.series[seriesKeys[0]]?.[i] ?? 0),
+        is_total: i === 0 || i === (chart.x || []).length - 1,
+      }));
 
     let running = 0;
     const wfData = steps.map((step: WaterfallStep) => {
       const d = Number(step.delta ?? step.value ?? 0);
       let base = 0;
       let val = 0;
-      let color = "var(--chart-1)";
+      let color = "var(--chart-1, #56B4E9)";
 
       if (step.is_total) {
         base = 0;
         val = d;
         running = d;
-        color = "var(--chart-2)";
+        color = "var(--chart-2, #E69F00)";
       } else {
         if (d >= 0) {
           base = running;
@@ -721,7 +886,8 @@ function renderChartByType(
         <XAxis
           dataKey="name"
           stroke="var(--text-secondary)"
-          interval="preserveStartEnd"
+          interval={wfData.length <= 8 ? 0 : "preserveStartEnd"}
+          minTickGap={wfData.length <= 8 ? 4 : 20}
           padding={{ left: 12, right: 12 }}
         />
         <YAxis stroke="var(--text-secondary)" tickFormatter={(v) => formatNumber(v)} />
@@ -739,7 +905,7 @@ function renderChartByType(
                     <span className="tooltip-name">{item._is_total ? "Tổng mức" : "Thay đổi"}:</span>
                     <span
                       className="tooltip-val"
-                      style={{ color: item._is_total ? "var(--text-primary)" : item._delta >= 0 ? "var(--pos)" : "var(--neg)" }}
+                      style={{ color: item._is_total ? "var(--text-primary)" : item._delta >= 0 ? "var(--pos, #10b981)" : "var(--neg, #ef4444)" }}
                     >
                       {item._is_total
                         ? `${formatNumber(item._delta)} ${chart.unit || ""}`
@@ -763,40 +929,61 @@ function renderChartByType(
   }
 
   if (chartType === "bar_horizontal") {
+    const isCorrUnit = chart.unit === "r";
     return (
       <BarChart
         data={data}
         layout="vertical"
         accessibilityLayer={false}
-        barCategoryGap="20%"
-        maxBarSize={48}
-        margin={{ top: 12, right: 24, left: 32, bottom: 12 }}
+        barCategoryGap="18%"
+        maxBarSize={42}
+        margin={{ top: 12, right: 24, left: 16, bottom: 12 }}
       >
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
         <XAxis
           type="number"
           stroke="var(--text-secondary)"
-          tickFormatter={(v) => (chart.unit === "%" ? formatPercent(v) : formatNumber(v))}
-          domain={isSigned ? [(dataMin: number) => Math.min(0, dataMin), (dataMax: number) => Math.max(0, dataMax)] : undefined}
+          tickFormatter={(v) =>
+            chart.unit === "%"
+              ? formatPercent(v)
+              : isCorrUnit
+                ? formatNumber(v, { decimals: 2 })
+                : formatNumber(v)
+          }
         />
-        <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" width={95} />
+        <YAxis
+          dataKey="name"
+          type="category"
+          stroke="var(--text-secondary)"
+          width={115}
+          interval={0}
+          tick={{ fontSize: 12 }}
+        />
         {isSigned && <ReferenceLine x={0} stroke="rgba(148, 163, 184, 0.55)" strokeWidth={1.5} />}
         <Tooltip content={<CustomChartTooltip unit={chart.unit} isContribution={isContribution} isSigned={isSigned} />} />
         <Legend />
         {seriesKeys.map((k, sIdx) => {
           const isForecastKey = k.toLowerCase().includes("dự báo") || k.toLowerCase().includes("forecast");
+          const allNeg = isSigned && data.every((d) => Number(d[k] || 0) < 0);
+          const barFill = isForecastKey
+            ? "var(--chart-2, #eab308)"
+            : isSigned
+              ? allNeg
+                ? "var(--neg, #ef4444)"
+                : "var(--pos, #10b981)"
+              : PALETTE[sIdx % PALETTE.length];
           return (
             <Bar
               key={k}
               dataKey={k}
               name={chart.display_name && seriesKeys.length === 1 ? chart.display_name : k}
-              fill={isForecastKey ? "var(--chart-2, #eab308)" : PALETTE[sIdx % PALETTE.length]}
+              fill={barFill}
               radius={[0, 4, 4, 0]}
             >
               {isSigned &&
                 data.map((entry, cIdx) => {
                   const val = Number(entry[k] || 0);
-                  return <Cell key={cIdx} fill={val >= 0 ? "var(--pos)" : "var(--neg)"} />;
+                  return <Cell key={cIdx} fill={val >= 0 ? "var(--pos, #10b981)" : "var(--neg, #ef4444)"} />;
                 })}
             </Bar>
           );
@@ -819,8 +1006,8 @@ function renderChartByType(
           dataKey="name"
           tickFormatter={formatAxisDate}
           stroke="var(--text-secondary)"
-          interval="preserveStartEnd"
-          minTickGap={24}
+          interval={data.length <= 8 ? 0 : "preserveStartEnd"}
+          minTickGap={data.length <= 8 ? 4 : 24}
           padding={{ left: 12, right: 12 }}
         />
         <YAxis stroke="var(--text-secondary)" tickFormatter={(v) => formatNumber(v)} />
@@ -840,7 +1027,6 @@ function renderChartByType(
     );
   }
 
-  // Biểu đồ Tròn / Donut (Pie) — chuẩn hóa tỷ trọng không bị lệch làm tròn 0.1%
   if (chartType === "pie") {
     const rawEntries = (chart.x || []).map((name, i) => {
       const rawVal = Number(chart.series[seriesKeys[0]]?.[i] ?? 0);
@@ -896,10 +1082,10 @@ function renderChartByType(
           cy="48%"
           outerRadius={92}
           innerRadius={52}
-          paddingAngle={2}
-          cornerRadius={4}
+          paddingAngle={0}
+          cornerRadius={0}
           stroke="var(--bg-card, #0f172a)"
-          strokeWidth={1.5}
+          strokeWidth={1}
           label={({ name, payload }: any) => {
             const p = payload as typeof pieData[0];
             return `${name || ""}: ${formatPercent(p?.sharePct ?? 0, 1)}`;
@@ -1144,6 +1330,8 @@ function renderChartByType(
     );
   }
 
+  const isFewCategories = data.length <= 8;
+
   return (
     <BarChart
       data={data}
@@ -1157,33 +1345,41 @@ function renderChartByType(
         dataKey="name"
         tickFormatter={formatAxisDate}
         stroke="var(--text-secondary)"
-        interval="preserveStartEnd"
-        minTickGap={24}
+        interval={isFewCategories ? 0 : "preserveStartEnd"}
+        minTickGap={isFewCategories ? 4 : 24}
         padding={{ left: 12, right: 12 }}
       />
       <YAxis
         stroke="var(--text-secondary)"
         tickFormatter={(v) => (chart.unit === "%" ? formatPercent(v) : formatNumber(v))}
-        domain={isSigned ? [(dataMin: number) => Math.min(0, dataMin), (dataMax: number) => Math.max(0, dataMax)] : undefined}
       />
       {isSigned && <ReferenceLine y={0} stroke="rgba(148, 163, 184, 0.55)" strokeWidth={1.5} />}
       <Tooltip content={<CustomChartTooltip unit={chart.unit} isContribution={isContribution} isSigned={isSigned} />} />
       <Legend />
-      {seriesKeys.map((k, sIdx) => (
-        <Bar
-          key={k}
-          dataKey={k}
-          name={chart.display_name && seriesKeys.length === 1 ? chart.display_name : k}
-          fill={PALETTE[sIdx % PALETTE.length]}
-          radius={[4, 4, 0, 0]}
-        >
-          {isSigned &&
-            data.map((entry, cIdx) => {
-              const val = Number(entry[k] || 0);
-              return <Cell key={cIdx} fill={val >= 0 ? "var(--pos)" : "var(--neg)"} />;
-            })}
-        </Bar>
-      ))}
+      {seriesKeys.map((k, sIdx) => {
+        const allNeg = isSigned && data.every((d) => Number(d[k] || 0) < 0);
+        const barLegendFill = isSigned
+          ? allNeg
+            ? "var(--neg, #ef4444)"
+            : "var(--pos, #10b981)"
+          : PALETTE[sIdx % PALETTE.length];
+
+        return (
+          <Bar
+            key={k}
+            dataKey={k}
+            name={chart.display_name && seriesKeys.length === 1 ? chart.display_name : k}
+            fill={barLegendFill}
+            radius={[4, 4, 0, 0]}
+          >
+            {isSigned &&
+              data.map((entry, cIdx) => {
+                const val = Number(entry[k] || 0);
+                return <Cell key={cIdx} fill={val >= 0 ? "var(--pos, #10b981)" : "var(--neg, #ef4444)"} />;
+              })}
+          </Bar>
+        );
+      })}
     </BarChart>
   );
 }
@@ -1222,6 +1418,8 @@ function CustomChartTooltip({
             formattedValue = signed.text;
           } else if (unit === "%") {
             formattedValue = formatPercent(val);
+          } else if (unit === "r") {
+            formattedValue = formatNumber(val, { decimals: 2 });
           } else if (unit) {
             formattedValue = `${formattedValue} ${unit}`;
           }
@@ -1235,8 +1433,8 @@ function CustomChartTooltip({
                 style={{
                   color: (isContribution || isSigned)
                     ? val >= 0
-                      ? "var(--pos)"
-                      : "var(--neg)"
+                      ? "var(--pos, #10b981)"
+                      : "var(--neg, #ef4444)"
                     : "var(--text-primary)",
                 }}
               >
@@ -1246,6 +1444,102 @@ function CustomChartTooltip({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+const DEMO_CHARTS: ChartSpec[] = [
+  {
+    chart_type: "bar",
+    title: "Đóng góp vào thay đổi Sales theo Category",
+    x: ["Office Supplies", "Technology", "Furniture"],
+    series: { "Thay đổi Sales": [62157.2, 45366.6, 16485.8] },
+    caption: "Mức thay đổi 12 kỳ gần nhất so với 12 kỳ liền trước.",
+    display_name: "Thay đổi Sales",
+    perspective: "contribution_to_change",
+    role: "primary",
+  },
+  {
+    chart_type: "bar_horizontal",
+    title: "Bóc tách thay đổi bên trong Office Supplies theo Sub-category",
+    x: ["Supplies", "Labels", "Envelopes", "Art", "Fasteners", "Storage", "Appliances", "Binders"],
+    series: { "Thay đổi Sales": [-1351.3, 1480.2, 2610.5, 4120.0, 9850.4, 15210.8, 19830.1, 23104.7] },
+    caption: "Binders là yếu tố tác động mạnh nhất trong Office Supplies.",
+    display_name: "Thay đổi Sales",
+    perspective: "contribution_to_change",
+    role: "supplementary",
+  },
+];
+
+export default function App() {
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 space-y-6">
+      <style>{`
+        :root {
+          --chart-1: #56B4E9;
+          --chart-2: #E69F00;
+          --chart-3: #2BC4A0;
+          --chart-4: #CC79A7;
+          --pos: #10b981;
+          --neg: #ef4444;
+          --text-primary: #f1f5f9;
+          --text-secondary: #94a3b8;
+          --border-subtle: rgba(148, 163, 184, 0.14);
+          --bg-card: #0f172a;
+        }
+        .chart-card {
+          background: #0f172a;
+          border: 1px solid rgba(148, 163, 184, 0.18);
+          border-radius: 12px;
+          padding: 16px 20px;
+        }
+        .chart-card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 12px;
+        }
+        .chart-card-title {
+          font-size: 15px;
+          font-weight: 600;
+          color: #f8fafc;
+        }
+        .chart-card-subtitle {
+          display: flex;
+          gap: 8px;
+          margin-top: 4px;
+        }
+        .chart-role-badge, .chart-unit-badge {
+          font-size: 11px;
+          padding: 2px 8px;
+          border-radius: 999px;
+          background: rgba(59, 130, 246, 0.15);
+          color: #60a5fa;
+        }
+        .chart-card-caption {
+          margin-top: 10px;
+          padding-top: 8px;
+          border-top: 1px solid rgba(148, 163, 184, 0.12);
+          font-size: 12px;
+          color: #94a3b8;
+          display: flex;
+          gap: 6px;
+        }
+        .caption-bar { color: #3b82f6; }
+        .custom-chart-tooltip {
+          background: #1e293b;
+          border: 1px solid rgba(148, 163, 184, 0.25);
+          border-radius: 8px;
+          padding: 8px 12px;
+          font-size: 12px;
+        }
+        .tooltip-title { font-weight: 600; margin-bottom: 4px; color: #f8fafc; }
+        .tooltip-item { display: flex; align-items: center; gap: 6px; }
+        .tooltip-dot { width: 8px; height: 8px; border-radius: 50%; }
+      `}</style>
+      {DEMO_CHARTS.map((c, idx) => (
+        <ChartCard key={idx} chart={c} />
+      ))}
     </div>
   );
 }

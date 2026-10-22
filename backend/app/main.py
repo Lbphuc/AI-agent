@@ -347,7 +347,7 @@ async def interpret_question(
         ) from exc
 
     final_levels, notices = analytics.resolve_levels(mode, goal.levels, avail)
-    goal_summary = _generate_goal_summary(goal)
+    goal_summary = _generate_goal_summary(goal, resolved_levels=final_levels)
 
     chart_check: Optional[ChartVerdict] = None
     all_prefs = _parse_chart_prefs(chart_pref, chart_prefs)
@@ -885,8 +885,8 @@ def _describe_single_task(task) -> str:
     return base
 
 
-def _generate_goal_summary(goal: AnalysisGoal) -> str:
-    """Tạo câu tóm tắt mục tiêu ngắn gọn, tự nhiên, phản ánh ĐẦY ĐỦ tất cả các tác vụ trong goal."""
+def _generate_goal_summary(goal: AnalysisGoal, resolved_levels: list[AnalysisLevel] | None = None) -> str:
+    """Tạo câu tóm tắt mục tiêu ngắn gọn, tự nhiên, ưu tiên phản ánh đúng cấp độ chiến lược (Chẩn đoán / Dự báo / Đề xuất)."""
     first_task = goal.tasks[0] if goal.tasks else None
     metric_raw = first_task.metric if first_task else None
     group_raw = next((t.group_by for t in goal.tasks if t.group_by), None)
@@ -895,14 +895,18 @@ def _generate_goal_summary(goal: AnalysisGoal) -> str:
 
     parts: list[str] = []
     objective = getattr(goal, "objective", None)
+    levels = resolved_levels if resolved_levels is not None else (goal.levels or ["descriptive"])
+    q_lower = goal.question.lower()
 
-    if len(goal.tasks) > 1:
-        # Nếu câu hỏi có nhiều tác vụ (ví dụ vừa xem xu hướng vừa tìm chi nhánh giảm mạnh nhất), mô tả đầy đủ từng vế
-        task_descs = [_describe_single_task(t) for t in goal.tasks]
-        combined = " và ".join(task_descs)
-        parts.append(combined[0].upper() + combined[1:] if combined else f"Phân tích {metric_disp.lower()}")
-    elif objective == "contribution_to_change":
-        action = f"Phân tích yếu tố đóng góp lớn nhất vào thay đổi {metric_disp.lower()}"
+    if objective == "prescriptive_action" or "prescriptive" in levels:
+        action = f"Đề xuất phương án chiến lược và ưu tiên {group_disp.lower() if group_disp else 'nhóm'} để cải thiện {metric_disp.lower()}"
+        parts.append(action)
+    elif objective == "forecast" or ("forecast" in levels and "diagnostic" not in levels):
+        horizon = getattr(goal, "forecast_horizon", None) or 3
+        action = f"Dự báo xu hướng {metric_disp.lower()} trong {horizon} kỳ tiếp theo"
+        parts.append(action)
+    elif objective == "contribution_to_change" or "diagnostic" in levels or any(w in q_lower for w in ("nguyên nhân", "vì sao", "tại sao", "do đâu", "đóng góp")):
+        action = f"Phân tích nguyên nhân biến động và yếu tố đóng góp vào thay đổi {metric_disp.lower()}"
         if group_disp:
             action += f" theo {group_disp.lower()}"
         parts.append(action)
@@ -912,13 +916,10 @@ def _generate_goal_summary(goal: AnalysisGoal) -> str:
     elif objective == "top_growers":
         action = f"Tìm {group_disp.lower() or 'nhóm'} tăng trưởng {metric_disp.lower()} mạnh nhất"
         parts.append(action)
-    elif objective == "prescriptive_action":
-        action = f"Đề xuất phương án ưu tiên {group_disp.lower() if group_disp else 'nhóm'} để cải thiện {metric_disp.lower()}"
-        parts.append(action)
-    elif objective == "forecast":
-        horizon = getattr(goal, "forecast_horizon", None) or 3
-        action = f"Dự báo xu hướng {metric_disp.lower()} trong {horizon} kỳ tiếp theo"
-        parts.append(action)
+    elif len(goal.tasks) > 1:
+        task_descs = [_describe_single_task(t) for t in goal.tasks]
+        combined = " và ".join(task_descs)
+        parts.append(combined[0].upper() + combined[1:] if combined else f"Phân tích {metric_disp.lower()}")
     elif first_task:
         desc = _describe_single_task(first_task)
         parts.append(desc[0].upper() + desc[1:] if desc else f"Phân tích {metric_disp.lower()}")
